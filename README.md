@@ -80,6 +80,8 @@ installed as the KernelSU driver.
 | KERNEL_IMAGE_NAME | <div align="center">❌</div> | Format of the kernel image for flashable AnyKernel3 zip | <div align="center">`Image.gz-dtb`</div> |
 | KERNEL_CONFIG_BASE | <div align="center">❌</div> | Base defconfig inside the kernel tree | <div align="center">`vendor/mt6768_defconfig`</div> |
 | KERNEL_CONFIG_FRAGMENT_DIR | <div align="center">❌</div> | Directory holding the per-device config fragment (`<device>.config`) | <div align="center">`vendor`</div> |
+| KERNEL_NAME | <div align="center">✅</div> | Kernel name: sets `CONFIG_LOCALVERSION`, so `uname -r` ends with `...-LineaTan`; also used for artifact names and the AnyKernel3 installer text | <div align="center">`LineaTan`</div> |
+| KERNEL_AUTHOR | <div align="center">✅</div> | Handle shown in the AnyKernel3 installer line (`<KERNEL_NAME> Kernel for <device> by @<author>`) | <div align="center">`Tanuki33`</div> |
 
 <br>
 
@@ -165,6 +167,22 @@ installed as the KernelSU driver.
 > - **MidoriSU (default)** – branch-linked runtime hooking, no kernel source patches.
 > - **KernelSU-Next** – `KSU_HOOKS_PATCH=true` + `KSU_MANUAL_HOOKS=true`, which applies
 >   `patches/KSU_HOOKS_PATCH.patch` (specific to the 4.19.325 MT6768 tree).
+
+### Installer branding
+
+The flashable AnyKernel3 folder is branded during the build (`Anykernel3` step):
+
+- `kernel.string` → `<KERNEL_NAME> Kernel for <device> by @<KERNEL_AUTHOR>`
+- `device.name*` trimmed to the device that is being built
+- a `version` file with `<KERNEL_NAME> for <device>` and `Linux 4.19.325 | LineageOS 24 | <build time>`
+- the upstream ASCII art (`banner`) is deleted, unless this repo provides `assets/banner`,
+  which is copied in instead
+
+To ship your own ASCII art, commit it as `assets/banner` in this repo — no AnyKernel3 fork
+needed. Size it for a recovery console: **≤ 60 columns wide and ≤ 36 rows tall**, plain ASCII
+(`#`, `%`, `@`, `/`, `\\`, `.`, `:`, `-`, `=`), no tabs, no Unicode, keep trailing spaces if
+your art needs them for alignment. The upstream ShockWave art is 54 × 36, so that is a known
+safe canvas. Each line is printed verbatim by `ui_printfile`, so wider art wraps and breaks.
 
 ## Credits
 

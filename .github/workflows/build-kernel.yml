@@ -270,6 +270,12 @@ jobs:
             echo "$1=$2" >> "$CONFIG_FILE"
         }
 
+        # Kernel identity: uname -r ends with this, e.g. 4.19.325-cip136-st20-LineaTan.
+        # Set explicitly so any localversion the tree ships is overwritten.
+        KERNEL_NAME="${KERNEL_NAME:-LineaTan}"
+        set_config CONFIG_LOCALVERSION "\"-$KERNEL_NAME\""
+        echo "Kernel localversion: -$KERNEL_NAME"
+
         if [ "${{ env.ENABLE_KERNELSU }}" = true ]; then
             if [ "${{ env.KSU_HOOKS_PATCH }}" = true ]; then
                 git apply $GITHUB_WORKSPACE/patches/KSU_HOOKS_PATCH.patch
@@ -466,6 +472,31 @@ jobs:
             cp android-kernel/out/arch/${{ env.KERNEL_ARCH }}/boot/dtbo.img AnyKernel3/
         fi
         rm -rf AnyKernel3/.git* AnyKernel3/README.md
+        # Installer branding: AK3's update-binary prints `banner`, then kernel.string,
+        # then the `version` file. Keep the AnyKernel3 repo's own banner (if any);
+        # assets/banner in this repo overrides it.
+        if [ -f AnyKernel3/anykernel.sh ]; then
+            KERNEL_NAME="${KERNEL_NAME:-LineaTan}"
+            KERNEL_AUTHOR="${KERNEL_AUTHOR:-Tanuki33}"
+            sed -i "s|^kernel.string=.*|kernel.string=${KERNEL_NAME} Kernel for ${DEVICE} by @${KERNEL_AUTHOR}|" AnyKernel3/anykernel.sh
+            sed -i "s|^device.name1=.*|device.name1=${DEVICE}|" AnyKernel3/anykernel.sh
+            sed -i "/^device\.name[2-9]=/d" AnyKernel3/anykernel.sh
+            printf '%s\n' "${KERNEL_NAME} for ${DEVICE}" "Linux 4.19.325 | LineageOS 24 | ${BUILD_TIME}" > AnyKernel3/version
+            # ASCII art: ship assets/banner from this repo if it exists, otherwise drop
+            # the upstream art (it belongs to someone else).
+            if [ -f "$GITHUB_WORKSPACE/assets/banner" ]; then
+                cp "$GITHUB_WORKSPACE/assets/banner" AnyKernel3/banner
+                echo "banner: assets/banner ($(wc -l < AnyKernel3/banner) lines, max width $(awk '{ if (length($0) > m) m = length($0) } END { print m+0 }' AnyKernel3/banner))"
+            elif [ -f AnyKernel3/banner ]; then
+                echo "banner: from the AnyKernel3 repo ($(wc -l < AnyKernel3/banner) lines, max width $(awk '{ if (length($0) > m) m = length($0) } END { print m+0 }' AnyKernel3/banner))"
+            else
+                echo "banner: none, installer shows text only"
+            fi
+            echo "--- installer text ---"
+            grep -E "^kernel.string=|^device.name" AnyKernel3/anykernel.sh
+        else
+            echo "::warning::AnyKernel3/anykernel.sh not found, installer text left untouched"
+        fi
 
     - name: Make boot image
       if: env.HAVE_SOURCE_BOOT_IMAGE == 'true' && env.CHECK_FILE_IS_OK == 'true'

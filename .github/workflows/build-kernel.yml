@@ -7,28 +7,16 @@ on:
         required: true
         type: choice
         options:
-        - 'lancelot'
         - 'merlin'
-        - 'selene'
+      build_midori:
+        description: 'Build MidoriSU (non-GKI driver, recommended)'
+        required: true
+        default: true
+        type: boolean
       build_ksun:
-        description: 'Build KernelSU-Next A13+'
+        description: 'Build KernelSU-Next'
         required: true
-        default: true
-        type: boolean
-      build_ksun_old:
-        description: 'Build KernelSU-Next A11+'
-        required: true
-        default: true
-        type: boolean
-      build_xxksu:
-        description: 'Build xxksu A13+'
-        required: true
-        default: true
-        type: boolean
-      build_xxksu_old:
-        description: 'Build xxksu A11+'
-        required: true
-        default: true
+        default: false
         type: boolean
 
 jobs:
@@ -42,10 +30,8 @@ jobs:
         name: Generate build matrix
         run: |
           targets=()
+          if [[ "${{ github.event.inputs.build_midori }}" == "true" ]]; then targets+=("midori"); fi
           if [[ "${{ github.event.inputs.build_ksun }}" == "true" ]]; then targets+=("ksun"); fi
-          if [[ "${{ github.event.inputs.build_ksun_old }}" == "true" ]]; then targets+=("ksun-old"); fi
-          if [[ "${{ github.event.inputs.build_xxksu }}" == "true" ]]; then targets+=("xxksu"); fi
-          if [[ "${{ github.event.inputs.build_xxksu_old }}" == "true" ]]; then targets+=("xxksu-old"); fi
           json=$(printf '%s\n' "${targets[@]}" | jq -R . | jq -s '{target: .}')
           echo "matrix<<EOF" >> $GITHUB_OUTPUT
           echo "$json" >> $GITHUB_OUTPUT
@@ -82,16 +68,7 @@ jobs:
         TARGET_CONFIG_FILENAME="${TARGET_CONFIG_FILENAME/-old/}"
         TARGET_CONFIG_FILENAME_SUFFIX=$TARGET_CONFIG_FILENAME
         grep -v -E "^#|^\n" config-${TARGET_CONFIG_FILENAME_SUFFIX}.env | sed 's/ #.*//; s/#.*//' >> $GITHUB_ENV
-        if [[ "${{ matrix.target }}" == *"-old" ]]; then
-            echo "ANDROID_TAG=[A11+]" >> $GITHUB_ENV
-        else
-            echo "ANDROID_TAG=[A13+]" >> $GITHUB_ENV
-        fi
-
-    - name: Check if old Android build
-      if: contains(matrix.target, 'old')
-      run: |
-        echo "OLD_ANDROID_SUPPORT=true" >> $GITHUB_ENV
+        echo "ANDROID_TAG=[A17]" >> $GITHUB_ENV
 
     - name: Set swap to 10G
       uses: pierotofy/set-swap-space@master
@@ -238,9 +215,16 @@ jobs:
       if: env.ENABLE_KERNELSU == 'true'
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
-        curl -LSs "$KERNELSU_SETUP_SOURCE" | bash -s ${{ env.KERNELSU_TAG }}
-        KSU_VERSION="_$(cd $(echo "$KERNELSU_SETUP_SOURCE" | cut -d/ -f5) || cd KernelSU && expr $(git rev-list --count HEAD) + 10200)"
-        echo "UPLOADNAME=-KernelSU-${{ matrix.target }}$KSU_VERSION" >> $GITHUB_ENV
+        sh $GITHUB_WORKSPACE/scripts/setup-ksu.sh
+        KSU_DIR=$(find . -maxdepth 1 -type d -name 'KernelSU*' | head -n1)
+        if [ -n "$KERNELSU_REPO" ]; then
+            KSU_VERSION="_$(git -C "$KSU_DIR" rev-parse --short HEAD)"
+        elif [ -n "$KSU_DIR" ]; then
+            KSU_VERSION="_$(expr $(git -C "$KSU_DIR" rev-list --count HEAD) + 10200)"
+        else
+            KSU_VERSION=""
+        fi
+        echo "UPLOADNAME=-${KSU_NAME}-${{ matrix.target }}$KSU_VERSION" >> $GITHUB_ENV
         if [ ${{ env.KSU_REVERT }} = true ]; then
             git apply $GITHUB_WORKSPACE/patches/KSU_REVERT.patch
         fi
@@ -269,20 +253,39 @@ jobs:
 
         CONFIG_FILE="$GITHUB_WORKSPACE/kernel_workspace/android-kernel/out/.config"
 
+        set_config() {
+            sed -i "/^$1=/d; /^# $1 is not set$/d" "$CONFIG_FILE"
+            echo "$1=$2" >> "$CONFIG_FILE"
+        }
+
         if [ "${{ env.ENABLE_KERNELSU }}" = true ]; then
             if [ "${{ env.KSU_HOOKS_PATCH }}" = true ]; then
                 git apply $GITHUB_WORKSPACE/patches/KSU_HOOKS_PATCH.patch
-                if grep -q '^CONFIG_KSU=' "$CONFIG_FILE"; then
-                    sed -i 's/^CONFIG_KSU=.*/CONFIG_KSU=y/' "$CONFIG_FILE"
-                else
-                    echo 'CONFIG_KSU=y' >> "$CONFIG_FILE"
-                fi
             fi
             if [ "${{ env.ADD_KPROBES_CONFIG }}" = true ] && [ "${{ env.KSU_HOOKS_PATCH }}" != true ]; then
-                echo 'CONFIG_MODULES=y' >> "$CONFIG_FILE"
-                echo 'CONFIG_KPROBES=y' >> "$CONFIG_FILE"
-                echo 'CONFIG_HAVE_KPROBES=y' >> "$CONFIG_FILE"
-                echo 'CONFIG_KPROBE_EVENTS=y' >> "$CONFIG_FILE"
+                set_config CONFIG_MODULES y
+                set_config CONFIG_KPROBES y
+                set_config CONFIG_HAVE_KPROBES y
+                set_config CONFIG_KPROBE_EVENTS y
+            fi
+            # This is a 4.19 tree, so the driver has to work without kprobe/tracepoint
+            # hooking (5.10+ only): either the manual hooks patched above
+            # (KernelSU-Next) or runtime call-site hijacking (MidoriSU/backslashxx).
+            set_config CONFIG_KSU y
+            # both drivers depend on SELinux (>= 4.19 KernelSU-Next needs the cred hooks)
+            set_config CONFIG_SECURITY y
+            set_config CONFIG_SECURITY_NETWORK y
+            set_config CONFIG_SECURITY_SELINUX y
+            if [ "${{ env.KSU_MANUAL_HOOKS }}" = true ]; then
+                set_config CONFIG_KSU_MANUAL_HOOK y
+            fi
+            if [ "${{ env.KSU_BRANCH_LINK_HOOK }}" = true ]; then
+                set_config CONFIG_KALLSYMS y
+                set_config CONFIG_KSU_HACK_ARM64_BRANCH_LINK y
+                set_config CONFIG_KSU_TAMPER_SYSCALL_TABLE n
+            fi
+            if [ "${{ env.KSU_SUSFS }}" != true ]; then
+                set_config CONFIG_KSU_SUSFS n
             fi
         fi
 
@@ -322,15 +325,6 @@ jobs:
 
         if [ "${{ env.DISABLE_CC_WERROR }}" = true ]; then
             echo 'CONFIG_CC_WERROR=n' >> "$CONFIG_FILE"
-        fi
-
-        if [ "${{ env.OLD_ANDROID_SUPPORT }}" = true ]; then
-            git apply $GITHUB_WORKSPACE/patches/OLD_ANDROID_SUPPORT.patch
-            if grep -q '^CONFIG_MMC_CRYPTO_LEGACY=' "$CONFIG_FILE"; then
-                sed -i 's/^CONFIG_MMC_CRYPTO_LEGACY=.*/CONFIG_MMC_CRYPTO_LEGACY=y/' "$CONFIG_FILE"
-            else
-                echo 'CONFIG_MMC_CRYPTO_LEGACY=y' >> "$CONFIG_FILE"
-            fi
         fi
 
         if [ "${{ env.FIX_WIFI_SPEED }}" = true ]; then

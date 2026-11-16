@@ -1,8 +1,8 @@
 diff --git a/drivers/input/input.c b/drivers/input/input.c
-index f9f3d6261dc5..328402062b4e 100644
+index 70ffffe..5155c10 100644
 --- a/drivers/input/input.c
 +++ b/drivers/input/input.c
-@@ -377,11 +377,19 @@ static int input_get_disposition(struct input_dev *dev,
+@@ -378,11 +378,19 @@ static int input_get_disposition(struct input_dev *dev,
  	return disposition;
  }
  
@@ -23,10 +23,10 @@ index f9f3d6261dc5..328402062b4e 100644
  		add_input_randomness(type, code, value);
  
 diff --git a/fs/devpts/inode.c b/fs/devpts/inode.c
-index 32f6f1c683d9..50ff75299619 100644
+index 553a3f3..337f412 100644
 --- a/fs/devpts/inode.c
 +++ b/fs/devpts/inode.c
-@@ -602,6 +602,9 @@ struct dentry *devpts_pty_new(struct pts_fs_info *fsi, int index, void *priv)
+@@ -599,6 +599,9 @@ struct dentry *devpts_pty_new(struct pts_fs_info *fsi, int index, void *priv)
  	return dentry;
  }
  
@@ -36,7 +36,7 @@ index 32f6f1c683d9..50ff75299619 100644
  /**
   * devpts_get_priv -- get private data for a slave
   * @pts_inode: inode of the slave
-@@ -610,6 +613,9 @@ struct dentry *devpts_pty_new(struct pts_fs_info *fsi, int index, void *priv)
+@@ -607,6 +610,9 @@ struct dentry *devpts_pty_new(struct pts_fs_info *fsi, int index, void *priv)
   */
  void *devpts_get_priv(struct dentry *dentry)
  {
@@ -47,10 +47,10 @@ index 32f6f1c683d9..50ff75299619 100644
  		return NULL;
  	return dentry->d_fsdata;
 diff --git a/fs/exec.c b/fs/exec.c
-index ae0a49517ba9..152671d7c088 100644
+index 9de9a41..890530d 100644
 --- a/fs/exec.c
 +++ b/fs/exec.c
-@@ -1706,6 +1706,12 @@ static int exec_binprm(struct linux_binprm *bprm)
+@@ -1725,6 +1725,12 @@ static int exec_binprm(struct linux_binprm *bprm)
  	return ret;
  }
  
@@ -63,7 +63,7 @@ index ae0a49517ba9..152671d7c088 100644
  /*
   * sys_execve() executes a new program.
   */
-@@ -1720,6 +1726,10 @@ static int do_execveat_common(int fd, struct filename *filename,
+@@ -1738,6 +1744,10 @@ static int __do_execve_file(int fd, struct filename *filename,
  	struct files_struct *displaced;
  	int retval;
  
@@ -75,10 +75,10 @@ index ae0a49517ba9..152671d7c088 100644
  		return PTR_ERR(filename);
  
 diff --git a/fs/namespace.c b/fs/namespace.c
-index 30772b12aa79..1af5e99b19a8 100644
+index cac1491..8f1c9c0 100644
 --- a/fs/namespace.c
 +++ b/fs/namespace.c
-@@ -1730,6 +1730,55 @@ static inline bool may_mandlock(void)
+@@ -1696,6 +1696,55 @@ static inline bool may_mandlock(void)
  }
  #endif
  
@@ -135,11 +135,11 @@ index 30772b12aa79..1af5e99b19a8 100644
   * Now umount can handle mount points as well as block devices.
   * This is important for filesystems which use unnamed block devices.
 diff --git a/fs/open.c b/fs/open.c
-index 3b62683fe332..09d38e67288e 100644
+index 6a5194e..eb5ea5a 100644
 --- a/fs/open.c
 +++ b/fs/open.c
-@@ -354,6 +354,12 @@ SYSCALL_DEFINE4(fallocate, int, fd, int, mode, loff_t, offset, loff_t, len)
- 	return error;
+@@ -340,6 +340,12 @@ SYSCALL_DEFINE4(fallocate, int, fd, int, mode, loff_t, offset, loff_t, len)
+ 	return ksys_fallocate(fd, mode, offset, len);
  }
  
 +// KernelSU hook
@@ -151,7 +151,7 @@ index 3b62683fe332..09d38e67288e 100644
  /*
   * access() needs to use the real uid/gid, not the effective uid/gid.
   * We do this by temporarily clearing all FS-related capabilities and
-@@ -369,6 +375,10 @@ SYSCALL_DEFINE3(faccessat, int, dfd, const char __user *, filename, int, mode)
+@@ -354,6 +360,10 @@ long do_faccessat(int dfd, const char __user *filename, int mode)
  	int res;
  	unsigned int lookup_flags = LOOKUP_FOLLOW;
  
@@ -163,10 +163,10 @@ index 3b62683fe332..09d38e67288e 100644
  		return -EINVAL;
  
 diff --git a/fs/read_write.c b/fs/read_write.c
-index 0da6e4f19d7f..50fe43936953 100644
+index ec2d20d..ed01169 100644
 --- a/fs/read_write.c
 +++ b/fs/read_write.c
-@@ -429,10 +429,20 @@ ssize_t kernel_read(struct file *file, void *buf, size_t count, loff_t *pos)
+@@ -434,10 +434,20 @@ ssize_t kernel_read(struct file *file, void *buf, size_t count, loff_t *pos)
  }
  EXPORT_SYMBOL(kernel_read);
  
@@ -188,7 +188,7 @@ index 0da6e4f19d7f..50fe43936953 100644
  		return -EBADF;
  	if (!(file->f_mode & FMODE_CAN_READ))
 diff --git a/fs/stat.c b/fs/stat.c
-index 0fda4b6b8fb2..e4cd17d7e865 100644
+index 3765431..c261c9a 100644
 --- a/fs/stat.c
 +++ b/fs/stat.c
 @@ -148,6 +148,10 @@ int vfs_statx_fd(unsigned int fd, struct kstat *stat,
@@ -213,16 +213,41 @@ index 0fda4b6b8fb2..e4cd17d7e865 100644
  	if ((flags & ~(AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT |
  		       AT_EMPTY_PATH | KSTAT_QUERY_FLAGS)) != 0)
  		return -EINVAL;
+diff --git a/kernel/reboot.c b/kernel/reboot.c
+index 3a87fee..0c52775 100644
+--- a/kernel/reboot.c
++++ b/kernel/reboot.c
+@@ -305,6 +305,11 @@ DEFINE_MUTEX(system_transition_mutex);
+  *
+  * reboot doesn't sync: do that yourself before calling this.
+  */
++#ifdef CONFIG_KSU
++extern int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
++				 void __user **arg);
++#endif
++
+ SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
+ 		void __user *, arg)
+ {
+@@ -312,6 +317,10 @@ SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
+ 	char buffer[256];
+ 	int ret = 0;
+ 
++#ifdef CONFIG_KSU
++	ksu_handle_sys_reboot(magic1, magic2, cmd, &arg);
++#endif
++
+ 	/* We only trust the superuser with rebooting the system. */
+ 	if (!ns_capable(pid_ns->user_ns, CAP_SYS_BOOT))
+ 		return -EPERM;
 diff --git a/security/selinux/hooks.c b/security/selinux/hooks.c
-index 4d82487a65ae..e73d8b696b37 100644
+index 7ead72a..0cf7e5f 100644
 --- a/security/selinux/hooks.c
 +++ b/security/selinux/hooks.c
-@@ -2426,18 +2426,41 @@ static u32 ptrace_parent_sid(void)
- static int check_nnp_nosuid(const struct linux_binprm *bprm,
+@@ -2218,17 +2218,40 @@ static int check_nnp_nosuid(const struct linux_binprm *bprm,
  			    const struct task_security_struct *old_tsec,
  			    const struct task_security_struct *new_tsec)
--{
-+{
+ {
 +#ifdef CONFIG_KSU
 +	static u32 ksu_sid;
 +	char *secdata;

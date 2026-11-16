@@ -1,9 +1,12 @@
 <div align="start">
-  <h1>Kernel Build Action for Lancelot & Merlin</h1>
+  <h1>Kernel Build Action for Merlin (MT6768 / 4.19)</h1>
   <h3><i>Powered By GitHub Actions</i></h3>
 </div>
 
-A workflow to automatically build an Android kernel
+A workflow to automatically build an Android kernel for **merlin** (Redmi Note 9 / 10X 4G)
+from [Tanuki33/android_kernel_xiaomi_mt6768_S_Vendor](https://github.com/Tanuki33/android_kernel_xiaomi_mt6768_S_Vendor)
+(branch `lineage-24.0`, Linux 4.19, S vendor / Android 17), with **MidoriSU** root
+installed as the KernelSU driver.
 
 ## Usage Guide
 
@@ -61,24 +64,38 @@ A workflow to automatically build an Android kernel
 ## Options Guide
 
 > [!NOTE]
-> All options are located in [config.env](config.env)
+> All options are located in [config-midori.env](config-midori.env) (MidoriSU, default)
+> and [config-ksun.env](config-ksun.env) (KernelSU-Next). The workflow picks the file that
+> matches the selected build target.
+>
+> **MidoriSU** ([midori01/KernelSU](https://github.com/midori01/KernelSU), branch `xx`) is the
+> non-GKI driver that supports Linux 3.0 – 5.4+; it hooks syscalls at runtime, so **no kernel
+> patches are needed** and the `com.midori.supermanager` manager APK is recognised out of the box.
 
 | Base section options | Optional | Description | Example value |
 |---------------------|----------|-------------|----------------|
-| KERNEL_SOURCE | <div align="center">❌</div> | Link to kernel repository | `https://github.com/Jbub5/android_kernel_xiaomi_mt6768` |
-| KERNEL_SOURCE_BRANCH | <div align="center">❌</div> | Branch name of kernel repository | <div align="center">`kernel-tree`</div> |
+| KERNEL_SOURCE | <div align="center">❌</div> | Link to kernel repository | `https://github.com/Tanuki33/android_kernel_xiaomi_mt6768_S_Vendor` |
+| KERNEL_SOURCE_BRANCH | <div align="center">❌</div> | Branch name of kernel repository | <div align="center">`lineage-24.0`</div> |
 | KERNEL_ARCH | <div align="center">❌</div> | The Linux kernel architecture | <div align="center">`arm64`</div> |
 | KERNEL_IMAGE_NAME | <div align="center">❌</div> | Format of the kernel image for flashable AnyKernel3 zip | <div align="center">`Image.gz-dtb`</div> |
+| KERNEL_CONFIG_BASE | <div align="center">❌</div> | Base defconfig inside the kernel tree | <div align="center">`vendor/mt6768_defconfig`</div> |
+| KERNEL_CONFIG_FRAGMENT_DIR | <div align="center">❌</div> | Directory holding the per-device config fragment (`<device>.config`) | <div align="center">`vendor`</div> |
 
 <br>
 
 | KernelSU section options | Optional | Description | Example value |
 |--------------------------|----------|-------------|---------------|
 | ENABLE_KERNELSU | <div align="center">✅</div> | Enables accounting for the KernelSU options written below | <div align="center">`true`</div> |
-| KERNELSU_SETUP_SOURCE | <div align="center">❌</div> | Link to KernelSU setup script | `https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh` |
-| KERNELSU_TAG | <div align="center">✅</div> | Repository branch or tag of KernelSU | <div align="center">`v1.0.1`</div> |
+| KSU_NAME | <div align="center">✅</div> | Name used in the uploaded artifact | <div align="center">`MidoriSU`</div> |
+| KERNELSU_REPO | <div align="center">✅</div> | Git URL of the driver; when set the driver is cloned directly (MidoriSU mode) | `https://github.com/midori01/KernelSU` |
+| KERNELSU_REPO_BRANCH | <div align="center">✅</div> | Branch/tag/commit of `KERNELSU_REPO` | <div align="center">`xx`</div> |
+| KERNELSU_SETUP_SOURCE | <div align="center">✅</div> | Setup script used when `KERNELSU_REPO` is empty | `https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh` |
+| KERNELSU_TAG | <div align="center">✅</div> | Repository branch or tag handed to that setup script | <div align="center">`v1.0.1`</div> |
 | ADD_KPROBES_CONFIG | <div align="center">✅</div> | Apply [patches](https://kernelsu.org/guide/how-to-integrate-for-non-gki.html#integrate-with-kprobe) kernel source code to support KernelSU installation via kprobe | <div align="center">`false`</div> |
-| KSU_HOOKS_PATCH | <div align="center">✅</div> | Apply [patches](https://kernelsu.org/guide/how-to-integrate-for-non-gki.html#manually-modify-the-kernel-source) kernel source code to support KernelSU | <div align="center">`false`</div> |
+| KSU_HOOKS_PATCH | <div align="center">✅</div> | Apply [patches](https://kernelsu.org/guide/how-to-integrate-for-non-gki.html#manually-modify-the-kernel-source) kernel source code to support KernelSU (KernelSU-Next only) | <div align="center">`false`</div> |
+| KSU_MANUAL_HOOKS | <div align="center">✅</div> | Sets `CONFIG_KSU_MANUAL_HOOK=y` (requires `KSU_HOOKS_PATCH`) | <div align="center">`false`</div> |
+| KSU_BRANCH_LINK_HOOK | <div align="center">✅</div> | Sets `CONFIG_KSU_HACK_ARM64_BRANCH_LINK=y` + `CONFIG_KALLSYMS=y` — runtime call-site hooking, recommended for 4.19 | <div align="center">`true`</div> |
+| KSU_SUSFS | <div align="center">✅</div> | Keep `CONFIG_KSU_SUSFS` enabled (needs the susfs kernel patches, so it is off here) | <div align="center">`false`</div> |
 | KSU_REVERT | <div align="center">✅</div> | Revert the [commit](https://github.com/tiann/KernelSU/commit/898e9d4f8ca9b2f46b0c6b36b80a872b5b88d899) that removed non-GKI kernel support | <div align="center">`true`</div> |
 <!-- | KSU_EXPECTED_SIZE | idk | idk | idk | -->
 <!-- | KSU_EXPECTED_HASH | idk | idk | idk | -->
@@ -97,7 +114,7 @@ A workflow to automatically build an Android kernel
 | Compiler section options | Optional | Description | Example value |
 |--------------------------|----------|-------------|---------------|
 | USE_CLANG | <div align="center">✅</div> | Enable Clang toolchain usage and accounting for options written below | <div align="center">`true`</div> |
-| CLANG_SOURCE | <div align="center">❌</div> | Link to clang archive or repository | `https://github.com/ZyCromerZ/Clang/releases/download/21.0.0git-20250415-release/Clang-21.0.0git-20250415.tar.gz` |
+| CLANG_SOURCE | <div align="center">❌</div> | Link to clang archive or repository | `https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/b669748458572622ed716407611633c5415da25c/clang-r416183b.tar.gz` |
 | CLANG_BRANCH | <div align="center">✅</div> | Branch name of clang repository | <div align="center">`main`</div> |
 | USE_GCC | <div align="center">✅</div> | Enable GCC toolchain usage and accounting for options written below | <div align="center">`false`</div> |
 | USE_GCC_64 | <div align="center">✅</div> | Enable GCC 64-bit | <div align="center">`true`</div> |
@@ -135,18 +152,23 @@ A workflow to automatically build an Android kernel
 
 | Misc section options | Optional | Description | Example value |
 |----------------------|----------|-------------|---------------|
-| OLD_ANDROID_SUPPORT | <div align="center">✅</div> | Enable support for MIUI 12.5 and custom ROMs based on Android 11 through 12 | <div align="center">`false`</div> |
 | ADD_OVERLAYFS_CONFIG | <div align="center">✅</div> | Automatically put the configs needed for OverlayFS into your defconfig | <div align="center">`false`</div> |
-> [!IMPORTANT]
-> Enabling OLD_ANDROID_SUPPORT breaks support for Android 13+.
-
 <br>
 
 | Proton specific section options | Optional | Description | Example value |
 |----------------------------------|----------|-------------|---------------|
 | FIX_WIFI_SPEED | <div align="center">✅</div> | Rollback to old connectivity drivers that have better Wi-Fi speed, but cause spontaneous reboots on some devices | <div align="center">`false`</div> |
 
+> [!IMPORTANT]
+> This 4.19 tree has no kprobe/tracepoint KernelSU hooking (5.10+ only). Two wirings are
+> supported:
+> - **MidoriSU (default)** – branch-linked runtime hooking, no kernel source patches.
+> - **KernelSU-Next** – `KSU_HOOKS_PATCH=true` + `KSU_MANUAL_HOOKS=true`, which applies
+>   `patches/KSU_HOOKS_PATCH.patch` (specific to the 4.19.325 MT6768 tree).
+
 ## Credits
 
 - [xiaoleGun](https://github.com/xiaoleGun) for base
 - [dabao1955](https://github.com/dabao1955) for format of README.md
+- [midori01](https://github.com/midori01/KernelSU) for MidoriSU
+- [backslashxx](https://github.com/backslashxx/KernelSU) for the non-GKI KernelSU driver

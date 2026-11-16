@@ -22,7 +22,7 @@ on:
 jobs:
   generate-build-matrix:
     name: What to build?
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.set.outputs.matrix }}
     steps:
@@ -39,7 +39,7 @@ jobs:
 
   build:
     needs: generate-build-matrix
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       DEVICE: ${{ github.event.inputs.select_device }}
       CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
@@ -79,7 +79,16 @@ jobs:
       run: |
         echo "BUILD_TIME=$(TZ=Asia/Dhaka date "+%Y%m%d%H%M")" >> $GITHUB_ENV
         sudo apt-get update
-        sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git git-lfs gnupg gperf imagemagick lib32ncurses-dev lib32readline-dev lib32z1-dev liblz4-tool libncurses6 libncurses-dev libsdl1.2-dev libssl-dev libwxgtk3.2-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev
+        # libxml2 / liblz4-tool are gone from newer Ubuntu images and the 32-bit host
+        # packages need i386 multiarch, so install resiliently: one bulk attempt for
+        # speed, then per package with a warning for whatever this image lacks.
+        PACKAGES="bc bison build-essential ccache cpio curl device-tree-compiler flex g++-multilib gcc-multilib git git-lfs gnupg gperf imagemagick lib32ncurses-dev lib32readline-dev lib32z1-dev libelf-dev libncurses-dev libsdl1.2-dev libssl-dev libwxgtk3.2-dev libxml2-utils lz4 lzop pngcrush python3 rsync schedtool squashfs-tools xsltproc zip zlib1g-dev zstd"
+        sudo apt-get install -y --no-install-recommends $PACKAGES || {
+            for pkg in $PACKAGES; do
+                sudo apt-get install -y --no-install-recommends "$pkg" \
+                    || echo "::warning::Package '$pkg' is not installable on this runner image, skipping"
+            done
+        }
         mkdir -p $GITHUB_WORKSPACE/kernel_workspace
 
     - name: Install python2
@@ -128,6 +137,9 @@ jobs:
         if [[ "$(find ./clang -mindepth 1 -maxdepth 1 -type d | wc -l)" == "1" ]]; then
             mv -f "$(find ./clang -mindepth 1 -maxdepth 1 -type d)"/* ./clang
         fi
+        # Fail here, with a clear message, if the prebuilt toolchain cannot run
+        # on this runner image (e.g. missing shared libraries).
+        ./clang/bin/clang --version | head -n1
 
     - name: Download GCC
       if: env.USE_GCC == 'true' && env.USE_CLANG != 'true'

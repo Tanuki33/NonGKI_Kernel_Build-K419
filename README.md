@@ -64,13 +64,20 @@ installed as the KernelSU driver.
 ## Options Guide
 
 > [!NOTE]
-> All options are located in [config-midori.env](config-midori.env) (MidoriSU, default)
-> and [config-ksun.env](config-ksun.env) (KernelSU-Next). The workflow picks the file that
+> All options are located in [config-midori.env](config-midori.env) (MidoriSU, default),
+> [config-ksun.env](config-ksun.env) (KernelSU-Next) and
+> [config-sukisu.env](config-sukisu.env) (SukiSU-Nova). The workflow picks the file that
 > matches the selected build target.
 >
 > **MidoriSU** ([midori01/KernelSU](https://github.com/midori01/KernelSU), branch `xx`) is the
 > non-GKI driver that supports Linux 3.0 – 5.4+; it hooks syscalls at runtime, so **no kernel
 > patches are needed** and the `com.midori.supermanager` manager APK is recognised out of the box.
+>
+> **SukiSU-Nova** ([SukiSU-Nova/SukiSU-Nova](https://github.com/SukiSU-Nova/SukiSU-Nova), branch
+> `builtin`) is the non-GKI variant of the SukiSU line: no kprobes, but it needs the kernel
+> source to call its hook entry points, so it ships its own hook patch, extended with a
+> backport of the SUSFS v2.4.0 kernel sources so the full hiding/spoofing feature set works.
+> The manager APK is `com.sukisu.ultra`.
 
 | Base section options | Optional | Description | Example value |
 |---------------------|----------|-------------|----------------|
@@ -94,10 +101,14 @@ installed as the KernelSU driver.
 | KERNELSU_SETUP_SOURCE | <div align="center">✅</div> | Setup script used when `KERNELSU_REPO` is empty | `https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh` |
 | KERNELSU_TAG | <div align="center">✅</div> | Repository branch or tag handed to that setup script | <div align="center">`v1.0.1`</div> |
 | ADD_KPROBES_CONFIG | <div align="center">✅</div> | Apply [patches](https://kernelsu.org/guide/how-to-integrate-for-non-gki.html#integrate-with-kprobe) kernel source code to support KernelSU installation via kprobe | <div align="center">`false`</div> |
-| KSU_HOOKS_PATCH | <div align="center">✅</div> | Apply [patches](https://kernelsu.org/guide/how-to-integrate-for-non-gki.html#manually-modify-the-kernel-source) kernel source code to support KernelSU (KernelSU-Next only) | <div align="center">`false`</div> |
+| KSU_HOOKS_PATCH | <div align="center">✅</div> | Apply [patches](https://kernelsu.org/guide/how-to-integrate-for-non-gki.html#manually-modify-the-kernel-source) kernel source code to support KernelSU (KernelSU-Next and SukiSU-Nova) | <div align="center">`false`</div> |
+| KSU_HOOKS_PATCH_FILE | <div align="center">✅</div> | File in `patches/` applied when `KSU_HOOKS_PATCH` is true, defaults to `KSU_HOOKS_PATCH.patch` | <div align="center">`KSU_HOOKS_PATCH.patch`</div> |
+| KSU_KALLSYMS | <div align="center">✅</div> | Sets `CONFIG_KALLSYMS=y` without enabling branch-link hooking — needed by drivers that resolve symbols at runtime (SukiSU-Nova) | <div align="center">`false`</div> |
+| KSU_KPM | <div align="center">✅</div> | Sets `CONFIG_KPM=y` + `CONFIG_KALLSYMS_ALL=y` — SukiSU's KPM (kernel module) extension; 64-bit only, upstream warns about stability | <div align="center">`false`</div> |
+| KSU_DRIVER_PATCH | <div align="center">✅</div> | File in `patches/` applied **inside the cloned driver repo** (not the kernel tree) after setup; empty = none | <div align="center">`SUKISU_CPU_SPOOF_4.19.patch`</div> |
 | KSU_MANUAL_HOOKS | <div align="center">✅</div> | Sets `CONFIG_KSU_MANUAL_HOOK=y` (requires `KSU_HOOKS_PATCH`) | <div align="center">`false`</div> |
 | KSU_BRANCH_LINK_HOOK | <div align="center">✅</div> | Sets `CONFIG_KSU_HACK_ARM64_BRANCH_LINK=y` + `CONFIG_KALLSYMS=y` — runtime call-site hooking, recommended for 4.19 | <div align="center">`true`</div> |
-| KSU_SUSFS | <div align="center">✅</div> | Keep `CONFIG_KSU_SUSFS` enabled (needs the susfs kernel patches, so it is off here) | <div align="center">`false`</div> |
+| KSU_SUSFS | <div align="center">✅</div> | Keeps `CONFIG_KSU_SUSFS` **and all its sub-options** enabled (sus_path, sus_mount, sus_kstat, uname spoof, cmdline/bootconfig spoof, open_redirect, sus_map, priority uid filter). Requires a kernel tree that carries the SUSFS sources, i.e. `KSU_HOOKS_PATCH_FILE=SUKISU_SUSFS_4.19.patch` | <div align="center">`true`</div> |
 | KSU_REVERT | <div align="center">✅</div> | Revert the [commit](https://github.com/tiann/KernelSU/commit/898e9d4f8ca9b2f46b0c6b36b80a872b5b88d899) that removed non-GKI kernel support | <div align="center">`true`</div> |
 <!-- | KSU_EXPECTED_SIZE | idk | idk | idk | -->
 <!-- | KSU_EXPECTED_HASH | idk | idk | idk | -->
@@ -162,11 +173,25 @@ installed as the KernelSU driver.
 | FIX_WIFI_SPEED | <div align="center">✅</div> | Rollback to old connectivity drivers that have better Wi-Fi speed, but cause spontaneous reboots on some devices | <div align="center">`false`</div> |
 
 > [!IMPORTANT]
-> This 4.19 tree has no kprobe/tracepoint KernelSU hooking (5.10+ only). Two wirings are
+> This 4.19 tree has no kprobe/tracepoint KernelSU hooking (5.10+ only). Three wirings are
 > supported:
 > - **MidoriSU (default)** – branch-linked runtime hooking, no kernel source patches.
 > - **KernelSU-Next** – `KSU_HOOKS_PATCH=true` + `KSU_MANUAL_HOOKS=true`, which applies
 >   `patches/KSU_HOOKS_PATCH.patch` (specific to the 4.19.325 MT6768 tree).
+> - **SukiSU-Nova** – `KSU_HOOKS_PATCH=true` with the `builtin` branch driver, applying
+>   `patches/SUKISU_SUSFS_4.19.patch` (via `KSU_HOOKS_PATCH_FILE`). That patch is the core
+>   hook set **plus** the SUSFS v2.4.0 kernel integration backported to this 4.19 tree:
+>   `fs/susfs.c`, `include/linux/susfs*.h`, and the `fs/mm/security` hook sites
+>   (`namei`, `namespace`, `namespace/proc_namespace`, `readdir`, `stat`, `statfs`, `super`,
+>   `proc/*`, `memory.c`, `selinux/avc.c`, `kallsyms.c`), with the `vfs_kern_mount()` hunk
+>   adapted to this tree's fs_context-based mount code. SUSFS mode also needs
+>   `ksu_handle_setresuid` (kernel/sys.c) and `ksu_handle_post_execveat_sucompat`
+>   (fs/exec.c) which the patch adds.
+>   KPM is compiled in (`KSU_KPM=true`) and SUSFS is on (`KSU_SUSFS=true`, all sub-options).
+>   `KSU_DRIVER_PATCH=SUKISU_CPU_SPOOF_4.19.patch` fixes the driver's `elf_hwcap`
+>   over-write on 4.x before compiling it.
+>   Drop `KSU_HOOKS_PATCH_FILE` back to `SUKISU_HOOKS_PATCH.patch` (and `KSU_SUSFS=false`)
+>   for a SUSFS-less build.
 
 ### Installer branding
 

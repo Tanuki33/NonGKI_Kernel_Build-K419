@@ -18,6 +18,11 @@ on:
         required: true
         default: false
         type: boolean
+      build_sukisu:
+        description: 'Build SukiSU-Nova (non-GKI, builtin branch)'
+        required: true
+        default: false
+        type: boolean
 
 jobs:
   generate-build-matrix:
@@ -32,6 +37,7 @@ jobs:
           targets=()
           if [[ "${{ github.event.inputs.build_midori }}" == "true" ]]; then targets+=("midori"); fi
           if [[ "${{ github.event.inputs.build_ksun }}" == "true" ]]; then targets+=("ksun"); fi
+          if [[ "${{ github.event.inputs.build_sukisu }}" == "true" ]]; then targets+=("sukisu"); fi
           json=$(printf '%s\n' "${targets[@]}" | jq -R . | jq -s '{target: .}')
           echo "matrix<<EOF" >> $GITHUB_OUTPUT
           echo "$json" >> $GITHUB_OUTPUT
@@ -229,6 +235,12 @@ jobs:
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         sh $GITHUB_WORKSPACE/scripts/setup-ksu.sh
         KSU_DIR=$(find . -maxdepth 1 -type d -name 'KernelSU*' | head -n1)
+        if [ -n "${KSU_DRIVER_PATCH:-}" ] && [ -n "$KSU_DIR" ]; then
+            # Optional patch applied inside the cloned driver tree (patches/<file>),
+            # for driver-side fixes that cannot live in the kernel source patches.
+            git -C "$KSU_DIR" apply --whitespace=nowarn "$GITHUB_WORKSPACE/patches/$KSU_DRIVER_PATCH"
+            echo "Applied driver patch: $KSU_DRIVER_PATCH"
+        fi
         if [ -n "$KERNELSU_REPO" ]; then
             KSU_VERSION="_$(git -C "$KSU_DIR" rev-parse --short HEAD)"
         elif [ -n "$KSU_DIR" ]; then
@@ -278,7 +290,10 @@ jobs:
 
         if [ "${{ env.ENABLE_KERNELSU }}" = true ]; then
             if [ "${{ env.KSU_HOOKS_PATCH }}" = true ]; then
-                git apply $GITHUB_WORKSPACE/patches/KSU_HOOKS_PATCH.patch
+                # Per-driver hook patch, defaults to the KernelSU-Next one.
+                HOOKS_PATCH_FILE="${KSU_HOOKS_PATCH_FILE:-KSU_HOOKS_PATCH.patch}"
+                echo "Applying hook patch: patches/$HOOKS_PATCH_FILE"
+                git apply $GITHUB_WORKSPACE/patches/$HOOKS_PATCH_FILE
             fi
             if [ "${{ env.ADD_KPROBES_CONFIG }}" = true ] && [ "${{ env.KSU_HOOKS_PATCH }}" != true ]; then
                 set_config CONFIG_MODULES y
@@ -287,8 +302,8 @@ jobs:
                 set_config CONFIG_KPROBE_EVENTS y
             fi
             # This is a 4.19 tree, so the driver has to work without kprobe/tracepoint
-            # hooking (5.10+ only): either the manual hooks patched above
-            # (KernelSU-Next) or runtime call-site hijacking (MidoriSU/backslashxx).
+            # hooking (5.10+ only): manual hooks patched above (KernelSU-Next /
+            # SukiSU-Nova builtin) or runtime call-site hijacking (MidoriSU/backslashxx).
             set_config CONFIG_KSU y
             # both drivers depend on SELinux (>= 4.19 KernelSU-Next needs the cred hooks)
             set_config CONFIG_SECURITY y
@@ -297,12 +312,37 @@ jobs:
             if [ "${{ env.KSU_MANUAL_HOOKS }}" = true ]; then
                 set_config CONFIG_KSU_MANUAL_HOOK y
             fi
+            if [ "${{ env.KSU_KALLSYMS }}" = true ]; then
+                # SukiSU-Nova resolves symbols through kallsyms_on_each_symbol().
+                set_config CONFIG_KALLSYMS y
+            fi
+            if [ "${{ env.KSU_KPM }}" = true ]; then
+                # SukiSU KPM extension needs kallsyms (the Kconfig also selects
+                # KALLSYMS/KALLSYMS_ALL, written explicitly so olddefconfig keeps them).
+                set_config CONFIG_KALLSYMS y
+                set_config CONFIG_KALLSYMS_ALL y
+                set_config CONFIG_KPM y
+            fi
             if [ "${{ env.KSU_BRANCH_LINK_HOOK }}" = true ]; then
                 set_config CONFIG_KALLSYMS y
                 set_config CONFIG_KSU_HACK_ARM64_BRANCH_LINK y
                 set_config CONFIG_KSU_TAMPER_SYSCALL_TABLE n
             fi
-            if [ "${{ env.KSU_SUSFS }}" != true ]; then
+            if [ "${{ env.KSU_SUSFS }}" = true ]; then
+                # Written explicitly instead of relying on the Kconfig defaults,
+                # so `make` never turns one of them off for us.
+                set_config CONFIG_KSU_SUSFS y
+                set_config CONFIG_KSU_SUSFS_SUS_PATH y
+                set_config CONFIG_KSU_SUSFS_SUS_MOUNT y
+                set_config CONFIG_KSU_SUSFS_SUS_KSTAT y
+                set_config CONFIG_KSU_SUSFS_SPOOF_UNAME y
+                set_config CONFIG_KSU_SUSFS_ENABLE_LOG y
+                set_config CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS y
+                set_config CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG y
+                set_config CONFIG_KSU_SUSFS_OPEN_REDIRECT y
+                set_config CONFIG_KSU_SUSFS_SUS_MAP y
+                set_config CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER y
+            else
                 set_config CONFIG_KSU_SUSFS n
             fi
         fi
@@ -357,7 +397,7 @@ jobs:
 
     - name: Setup ccache
       if: env.ENABLE_CCACHE == 'true'
-      uses: hendrikmuhs/ccache-action@v1.2
+      uses: hendrikmuhs/ccache-action@v1.2.25
       with:
         key: build-kernel-${{ env.DEVICE }}${{ env.LOCALVERSION }}${{ env.UPLOADNAME }}
         max-size: 2G

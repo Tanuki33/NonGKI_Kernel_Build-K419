@@ -1,0 +1,22 @@
+diff --git a/kernel/extension/cpu_spoof.c b/kernel/extension/cpu_spoof.c
+index 0007c2f..c45e7d9 100644
+--- a/kernel/extension/cpu_spoof.c
++++ b/kernel/extension/cpu_spoof.c
+@@ -118,7 +118,17 @@ static int set_spoof_cpu(const struct ksu_set_spoof_cpu_cmd *cmd)
+             (unsigned long *)find_kernel_symbol_exact("elf_hwcap");
+         if (elf_hwcap_bitmap) {
+             elf_hwcap_bitmap[0] = cmd->hwcap;
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+             elf_hwcap_bitmap[1] = cmd->hwcap2;
++#else
++            /*
++             * 4.x arm64 declares elf_hwcap as a single unsigned long,
++             * so a second store would clobber the next .data global
++             * (usually compat_elf_hwcap). Skip it on 4.x.
++             */
++            if (cmd->hwcap2)
++                pr_warn("ksu: set_spoof_cpu: hwcap2 unsupported on this kernel, ignored");
++#endif
+         } else {
+             pr_warn("ksu: set_spoof_cpu failed to resolve 'elf_hwcap'\n");
+             ++missing;

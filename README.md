@@ -105,7 +105,7 @@ installed as the KernelSU driver.
 | KSU_HOOKS_PATCH_FILE | <div align="center">✅</div> | File in `patches/` applied when `KSU_HOOKS_PATCH` is true, defaults to `KSU_HOOKS_PATCH.patch` | <div align="center">`KSU_HOOKS_PATCH.patch`</div> |
 | KSU_KALLSYMS | <div align="center">✅</div> | Sets `CONFIG_KALLSYMS=y` without enabling branch-link hooking — needed by drivers that resolve symbols at runtime (SukiSU-Nova) | <div align="center">`false`</div> |
 | KSU_KPM | <div align="center">✅</div> | Sets `CONFIG_KPM=y` + `CONFIG_KALLSYMS_ALL=y` — SukiSU's KPM (kernel module) extension; 64-bit only, upstream warns about stability | <div align="center">`false`</div> |
-| KSU_DRIVER_PATCH | <div align="center">✅</div> | File in `patches/` applied **inside the cloned driver repo** (not the kernel tree) after setup; empty = none | <div align="center">`SUKISU_CPU_SPOOF_4.19.patch`</div> |
+| KSU_DRIVER_PATCH | <div align="center">✅</div> | File in `patches/` applied **inside the cloned driver repo** (not the kernel tree) after setup; empty = none | <div align="center">`SUKISU_DRIVER_4.19.patch`</div> |
 | KSU_MANUAL_HOOKS | <div align="center">✅</div> | Sets `CONFIG_KSU_MANUAL_HOOK=y` (requires `KSU_HOOKS_PATCH`) | <div align="center">`false`</div> |
 | KSU_BRANCH_LINK_HOOK | <div align="center">✅</div> | Sets `CONFIG_KSU_HACK_ARM64_BRANCH_LINK=y` + `CONFIG_KALLSYMS=y` — runtime call-site hooking, recommended for 4.19 | <div align="center">`true`</div> |
 | KSU_SUSFS | <div align="center">✅</div> | Keeps `CONFIG_KSU_SUSFS` **and all its sub-options** enabled (sus_path, sus_mount, sus_kstat, uname spoof, cmdline/bootconfig spoof, open_redirect, sus_map, priority uid filter). Requires a kernel tree that carries the SUSFS sources, i.e. `KSU_HOOKS_PATCH_FILE=SUKISU_SUSFS_4.19.patch` | <div align="center">`true`</div> |
@@ -188,8 +188,9 @@ installed as the KernelSU driver.
 >   `ksu_handle_setresuid` (kernel/sys.c) and `ksu_handle_post_execveat_sucompat`
 >   (fs/exec.c) which the patch adds.
 >   KPM is compiled in (`KSU_KPM=true`) and SUSFS is on (`KSU_SUSFS=true`, all sub-options).
->   `KSU_DRIVER_PATCH=SUKISU_CPU_SPOOF_4.19.patch` fixes the driver's `elf_hwcap`
->   over-write on 4.x before compiling it.
+>   `KSU_DRIVER_PATCH=SUKISU_DRIVER_4.19.patch` (applied inside the cloned driver)
+>   fixes the driver's `elf_hwcap` over-write on 4.x and guards the 5.10-only
+>   `<linux/static_call.h>` include the driver pulls in but never uses.
 >   Drop `KSU_HOOKS_PATCH_FILE` back to `SUKISU_HOOKS_PATCH.patch` (and `KSU_SUSFS=false`)
 >   for a SUSFS-less build.
 

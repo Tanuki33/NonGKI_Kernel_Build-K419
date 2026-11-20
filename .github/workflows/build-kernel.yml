@@ -217,7 +217,16 @@ jobs:
     - name: Download kernel source
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace
-        git clone --recursive ${{ env.KERNEL_SOURCE }} -b ${{ env.KERNEL_SOURCE_BRANCH }} android-kernel --depth=1
+        if [ -n "${KERNEL_COMMIT:-}" ]; then
+            # Pinned commit (KERNEL_COMMIT in the config): the commit has to be
+            # reachable, so clone the full branch and check it out afterwards.
+            git clone --recursive ${{ env.KERNEL_SOURCE }} -b ${{ env.KERNEL_SOURCE_BRANCH }} android-kernel
+            git -C android-kernel checkout --quiet "$KERNEL_COMMIT"
+            echo "Kernel source pinned to $(git -C android-kernel rev-parse --short HEAD) ($(git -C android-kernel log -1 --format=%s))"
+        else
+            git clone --recursive ${{ env.KERNEL_SOURCE }} -b ${{ env.KERNEL_SOURCE_BRANCH }} android-kernel --depth=1
+            echo "Kernel source at branch tip $(git -C android-kernel rev-parse --short HEAD) ($(git -C android-kernel log -1 --format=%s))"
+        fi
 
     - name: Download source boot image
       if: env.BUILD_BOOT_IMG == 'true'

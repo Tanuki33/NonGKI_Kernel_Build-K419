@@ -432,19 +432,33 @@ jobs:
             make O=out ARCH=${{ env.KERNEL_ARCH }} CC=clang ${{ env.EXTRA_CMDS }} olddefconfig
         fi
 
+        # Keep the full log and, if the build fails, print a compact error summary at
+        # the end of the step so the actual `error:` line is always visible.
+        BUILD_LOG=$GITHUB_WORKSPACE/build.log
+        : >"$BUILD_LOG"
+        set -o pipefail
+        trap 'rc=$?; if [ $rc -ne 0 ]; then echo "::group::Build errors (first 60 matches)"; grep -n -E "(error|Error) [0-9]*|error:|undefined reference|No rule to make|cannot find|fatal error" "$BUILD_LOG" | head -60; echo "::endgroup::"; fi' EXIT
         if [ "${{ env.ENABLE_CCACHE }}" = "true" ]; then
             if [ "${{ env.USE_GCC }}" = "true" ]; then
-                make -j$(nproc --all) CC="ccache gcc" O=out ARCH=${{ env.KERNEL_ARCH }} ${{ env.EXTRA_CMDS }}
+                make -j$(nproc --all) CC="ccache gcc" O=out ARCH=${{ env.KERNEL_ARCH }} ${{ env.EXTRA_CMDS }} 2>&1 | tee "$BUILD_LOG"
             else
-                make -j$(nproc --all) CC="ccache clang" O=out ARCH=${{ env.KERNEL_ARCH }} ${{ env.EXTRA_CMDS }}
+                make -j$(nproc --all) CC="ccache clang" O=out ARCH=${{ env.KERNEL_ARCH }} ${{ env.EXTRA_CMDS }} 2>&1 | tee "$BUILD_LOG"
             fi
         else
             if [ "${{ env.USE_GCC }}" = "true" ]; then
-                make -j$(nproc --all) CC=gcc O=out ARCH=${{ env.KERNEL_ARCH }} ${{ env.EXTRA_CMDS }}
+                make -j$(nproc --all) CC=gcc O=out ARCH=${{ env.KERNEL_ARCH }} ${{ env.EXTRA_CMDS }} 2>&1 | tee "$BUILD_LOG"
             else
-                make -j$(nproc --all) CC=clang O=out ARCH=${{ env.KERNEL_ARCH }} ${{ env.EXTRA_CMDS }}
+                make -j$(nproc --all) CC=clang O=out ARCH=${{ env.KERNEL_ARCH }} ${{ env.EXTRA_CMDS }} 2>&1 | tee "$BUILD_LOG"
             fi
         fi
+
+    - name: Upload build log on failure
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-log
+        path: build.log
+        if-no-files-found: ignore
 
     - name: Check a kernel output files
       run: |

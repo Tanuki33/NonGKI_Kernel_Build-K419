@@ -593,7 +593,7 @@ index 1482541..93ba0a7 100644
  	do_delayed_call(&done);
  	return res;
 diff --git a/fs/namespace.c b/fs/namespace.c
-index cac1491..db7ae11 100644
+index cac1491..6a57da5 100644
 --- a/fs/namespace.c
 +++ b/fs/namespace.c
 @@ -27,10 +27,21 @@
@@ -792,26 +792,22 @@ index cac1491..db7ae11 100644
  	hlist_for_each_entry_rcu(p, head, mnt_hash)
  		if (&p->mnt_parent->mnt == mnt && p->mnt_mountpoint == dentry)
  			return p;
-@@ -998,6 +1154,18 @@ struct vfsmount *vfs_kern_mount(struct file_system_type *type,
- 	if (!type)
+@@ -946,6 +1102,14 @@ struct vfsmount *vfs_create_mount(struct fs_context *fc)
  		return ERR_PTR(-EINVAL);
+ 	sb = fc->root->d_sb;
  
 +#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 +	// - We will just stop checking for ksu process if /sdcard/Android is accessible,
 +	//   for the sake of performance
-+	if (static_branch_unlikely(&susfs_is_sdcard_android_data_not_decrypted)) {
-+		if (susfs_is_current_ksu_domain()) {
-+			struct mount *susfs_mnt = susfs_alloc_non_unshare_ksu_vfsmnt(name ?: "none");
-+			if (susfs_mnt)
-+				return &susfs_mnt->mnt;
-+		}
-+	}
++	if (static_branch_unlikely(&susfs_is_sdcard_android_data_not_decrypted) &&
++	    susfs_is_current_ksu_domain())
++		mnt = susfs_alloc_non_unshare_ksu_vfsmnt(fc->source ?: "none");
++	else
 +#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
-+
- 	fc = fs_context_for_mount(type, flags);
- 	if (IS_ERR(fc))
- 		return ERR_CAST(fc);
-@@ -1039,7 +1207,40 @@ static struct mount *clone_mnt(struct mount *old, struct dentry *root,
+ 	mnt = alloc_vfsmnt(fc->source ?: "none");
+ 	if (!mnt)
+ 		return ERR_PTR(-ENOMEM);
+@@ -1039,7 +1203,40 @@ static struct mount *clone_mnt(struct mount *old, struct dentry *root,
  	struct mount *mnt;
  	int err;
  
@@ -852,7 +848,7 @@ index cac1491..db7ae11 100644
  	if (!mnt)
  		return ERR_PTR(-ENOMEM);
  
-@@ -1064,6 +1265,12 @@ static struct mount *clone_mnt(struct mount *old, struct dentry *root,
+@@ -1064,6 +1261,12 @@ static struct mount *clone_mnt(struct mount *old, struct dentry *root,
  
  	mnt->mnt.mnt_flags = old->mnt.mnt_flags;
  	mnt->mnt.mnt_flags &= ~(MNT_WRITE_HOLD|MNT_MARKED|MNT_INTERNAL);
@@ -865,7 +861,7 @@ index cac1491..db7ae11 100644
  	/* Don't allow unprivileged users to change mount flags */
  	if (flag & CL_UNPRIVILEGED) {
  		mnt->mnt.mnt_flags |= MNT_LOCK_ATIME;
-@@ -1696,6 +1903,55 @@ static inline bool may_mandlock(void)
+@@ -1696,6 +1899,55 @@ static inline bool may_mandlock(void)
  }
  #endif
  
@@ -921,7 +917,7 @@ index cac1491..db7ae11 100644
  /*
   * Now umount can handle mount points as well as block devices.
   * This is important for filesystems which use unnamed block devices.
-@@ -3073,6 +3329,9 @@ struct mnt_namespace *copy_mnt_ns(unsigned long flags, struct mnt_namespace *ns,
+@@ -3073,6 +3325,9 @@ struct mnt_namespace *copy_mnt_ns(unsigned long flags, struct mnt_namespace *ns,
  	copy_flags = CL_COPY_UNBINDABLE | CL_EXPIRE;
  	if (user_ns != ns->user_ns)
  		copy_flags |= CL_SHARED_TO_SLAVE | CL_UNPRIVILEGED;
@@ -931,7 +927,7 @@ index cac1491..db7ae11 100644
  	new = copy_tree(old, old->mnt.mnt_root, copy_flags);
  	if (IS_ERR(new)) {
  		namespace_unlock();
-@@ -3651,3 +3910,43 @@ const struct proc_ns_operations mntns_operations = {
+@@ -3651,3 +3906,43 @@ const struct proc_ns_operations mntns_operations = {
  	.install	= mntns_install,
  	.owner		= mntns_owner,
  };

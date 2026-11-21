@@ -194,6 +194,24 @@ installed as the KernelSU driver.
 >   Drop `KSU_HOOKS_PATCH_FILE` back to `SUKISU_HOOKS_PATCH.patch` (and `KSU_SUSFS=false`)
 >   for a SUSFS-less build.
 
+### Bisect variants (`build_sukisu_variants`)
+
+Ticking **SukiSU: also build bisect variants** in the workflow adds three more jobs next to
+`build_sukisu`, all driven by the same `config-sukisu.env` plus a per-target override:
+
+| Target | Overrides | Purpose |
+|---|---|---|
+| `sukisu` | – (SUSFS on, KPM on) | the shipping build |
+| `sukisu-nosusfs` | `KSU_SUSFS=false`, hooks patch only | is the SUSFS kernel patch the problem? |
+| `sukisu-nokpm` | `KSU_KPM=false` | is KPM the problem? |
+| `sukisu-nosusfs-nokpm` | both | bare driver wiring |
+
+Each target produces its own zip (`...-sukisu-nosusfs-...zip`) and flashes independently,
+so one workflow run answers the whole question instead of one build per hour. Overrides are
+semicolon-separated `key=value` pairs appended to `$GITHUB_ENV` after the config file, i.e.
+they always win. The kernel source can be pinned per config with `KERNEL_COMMIT` (empty =
+branch tip) and the resolved commit is echoed in the build log.
+
 ### Installer branding
 
 The flashable AnyKernel3 folder is branded during the build (`Anykernel3` step):

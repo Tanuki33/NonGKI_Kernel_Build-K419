@@ -202,17 +202,14 @@ Ticking **SukiSU: also build bisect variants** in the workflow adds three more j
 | Target | Config file | Differs from `sukisu` by | Purpose |
 |---|---|---|---|
 | `sukisu` | `config-sukisu.env` | - | the shipping build |
-| `sukisu-nosusfs` | `config-sukisu-nosusfs.env` | SUSFS off, hooks patch only | control: is the driver side fine? |
-| `sukisu-nomount` | `config-sukisu-nomount.env` | `SUSFS_DISABLE_SUS_MOUNT.patch` | are the SUS_MOUNT hooks the fatal ones? |
-| `sukisu-nomonitor` | `config-sukisu-nomonitor.env` | `SUSFS_DISABLE_MONITOR.patch` | is the `/sdcard` fsnotify monitor the fatal one? |
+| `sukisu-nosusfs` | `config-sukisu-nosusfs.env` | SUSFS off, plain hooks patch | control build |
 
-A SUSFS feature **cannot** be switched off through Kconfig: the driver calls
-`susfs_add_sus_path()`, `susfs_set_uname()`, `susfs_add_open_redirect()`,
-`susfs_add_sus_map()`, `susfs_add_sus_kstat()`, `susfs_set_cmdline_or_bootconfig()`,
-`susfs_set_priority_uid_filter()`, `susfs_set_hide_sus_mnts_for_non_su_procs()` and
-`susfs_enable_log()` unconditionally, so a `CONFIG_KSU_SUSFS_*` of `n` fails the vmlinux
-link. Bisect with `KSU_EXTRA_PATCH=<patch>` instead: the feature stays compiled and is
-made inert at runtime.
+`patches/SUSFS_DISABLE_SUS_MOUNT.patch` and `patches/SUSFS_DISABLE_MONITOR.patch`
+are kept for debugging a SUSFS boot problem; wire them in with
+`KSU_EXTRA_PATCH=<patch>` (and `KSU_DRIVER_EXTRA_PATCH` for driver-side ones).
+A SUSFS feature cannot be switched off through Kconfig: the driver calls
+`susfs_add_*`/`susfs_set_*` unconditionally, so `CONFIG_KSU_SUSFS_*=n` fails the
+vmlinux link.
 
 Each target produces its own zip (`...-sukisu-nosusfs-...zip`) and flashes independently,
 so one workflow run answers the whole question instead of one build per hour. The variant

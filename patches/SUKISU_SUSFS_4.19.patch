@@ -88,7 +88,7 @@ index 596e99f..6a9c0d8 100644
  obj-y +=	buffer.o block_dev.o direct-io.o mpage.o
  else
 diff --git a/fs/exec.c b/fs/exec.c
-index 9de9a41..0db52a4 100644
+index 9de9a41..02ee4a9 100644
 --- a/fs/exec.c
 +++ b/fs/exec.c
 @@ -1725,6 +1725,16 @@ static int exec_binprm(struct linux_binprm *bprm)
@@ -108,23 +108,36 @@ index 9de9a41..0db52a4 100644
  /*
   * sys_execve() executes a new program.
   */
-@@ -1738,6 +1748,10 @@ static int __do_execve_file(int fd, struct filename *filename,
+@@ -1737,6 +1747,17 @@ static int __do_execve_file(int fd, struct filename *filename,
+ 	struct linux_binprm *bprm;
  	struct files_struct *displaced;
  	int retval;
- 
-+#ifdef CONFIG_KSU
-+	ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
++#if defined(CONFIG_KSU) && defined(CONFIG_KSU_SUSFS)
++	int ksu_execveat_ret = -EINVAL;
 +#endif
 +
++#ifdef CONFIG_KSU
++#if defined(CONFIG_KSU_SUSFS)
++	ksu_execveat_ret = ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
++#else
++	ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
++#endif
++#endif
+ 
  	if (IS_ERR(filename))
  		return PTR_ERR(filename);
- 
-@@ -1857,6 +1871,10 @@ static int __do_execve_file(int fd, struct filename *filename,
+@@ -1857,6 +1878,16 @@ static int __do_execve_file(int fd, struct filename *filename,
  	if (retval < 0)
  		goto out;
  
 +#if defined(CONFIG_KSU) && defined(CONFIG_KSU_SUSFS)
-+	ksu_handle_post_execveat_sucompat(&fd, &filename, &argv, &envp, &flags, &retval);
++	/* ksu_handle_execveat() returns 0 only when it rewrote su -> ksud,
++	 * and the su session fd belongs to that exec'd ksud only. Installing
++	 * it unconditionally puts an anon-inode fd (st_mode 0) into every
++	 * process, which makes Android's zygote abort with
++	 * "Unsupported st_mode for FD 3: Unknown". */
++	if (ksu_execveat_ret == 0)
++		ksu_handle_post_execveat_sucompat(&fd, &filename, &argv, &envp, &flags, &retval);
 +#endif
 +
  	/* execve succeeded */

@@ -193,6 +193,17 @@ installed as the KernelSU driver.
 >   `<linux/static_call.h>` include the driver pulls in but never uses.
 >   Drop `KSU_HOOKS_PATCH_FILE` back to `SUKISU_HOOKS_PATCH.patch` (and `KSU_SUSFS=false`)
 >   for a SUSFS-less build.
+>
+> Two kernel-side details only the SUSFS build needs, both already in the patch:
+> - the SUSFS driver keeps a second `ksu_handle_stat`/`ksu_handle_faccessat` that
+>   takes a `struct filename **` (the non-SUSFS one takes a user string), so in
+>   SUSFS mode the hooks sit in `filename_lookup()` and the plain-string hooks in
+>   `vfs_statx()`/`do_faccessat()` are compiled out,
+> - `ksu_handle_post_execveat_sucompat()` may only run when
+>   `ksu_handle_execveat()` reported the `su` -> `ksud` rewrite. Running it on
+>   every exec leaves an anon-inode fd (`st_mode` type bits = 0) at fd 3 of every
+>   process and Android's zygote aborts with
+>   `Unsupported st_mode for FD 3: Unknown`.
 
 ### Bisect variants (`build_sukisu_variants`)
 

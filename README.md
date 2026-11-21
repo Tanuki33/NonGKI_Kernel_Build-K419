@@ -197,20 +197,20 @@ installed as the KernelSU driver.
 ### Bisect variants (`build_sukisu_variants`)
 
 Ticking **SukiSU: also build bisect variants** in the workflow adds three more jobs next to
-`build_sukisu`, all driven by the same `config-sukisu.env` plus a per-target override:
+`build_sukisu`, each a normal matrix target with its own config file:
 
-| Target | Overrides | Purpose |
-|---|---|---|
-| `sukisu` | – (SUSFS on, KPM on) | the shipping build |
-| `sukisu-nosusfs` | `KSU_SUSFS=false`, hooks patch only | is the SUSFS kernel patch the problem? |
-| `sukisu-nokpm` | `KSU_KPM=false` | is KPM the problem? |
-| `sukisu-nosusfs-nokpm` | both | bare driver wiring |
+| Target | Config file | Differs from `sukisu` by | Purpose |
+|---|---|---|---|
+| `sukisu` | `config-sukisu.env` | – (SUSFS on, KPM on) | the shipping build |
+| `sukisu-nosusfs` | `config-sukisu-nosusfs.env` | `KSU_SUSFS=false` + `SUKISU_HOOKS_PATCH.patch` | is the SUSFS kernel patch the problem? |
+| `sukisu-nokpm` | `config-sukisu-nokpm.env` | `KSU_KPM=false` | is KPM the problem? |
+| `sukisu-nosusfs-nokpm` | `config-sukisu-nosusfs-nokpm.env` | both | bare driver wiring |
 
 Each target produces its own zip (`...-sukisu-nosusfs-...zip`) and flashes independently,
-so one workflow run answers the whole question instead of one build per hour. Overrides are
-semicolon-separated `key=value` pairs appended to `$GITHUB_ENV` after the config file, i.e.
-they always win. The kernel source can be pinned per config with `KERNEL_COMMIT` (empty =
-branch tip) and the resolved commit is echoed in the build log.
+so one workflow run answers the whole question instead of one build per hour. The variant
+configs are plain copies of `config-sukisu.env` — when you change the base config, update
+them too. The kernel source can be pinned per config with `KERNEL_COMMIT` (empty = branch
+tip) and the resolved commit is echoed in the build log.
 
 ### Installer branding
 

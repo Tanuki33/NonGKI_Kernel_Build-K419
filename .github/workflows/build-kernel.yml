@@ -40,21 +40,14 @@ jobs:
         name: Generate build matrix
         run: |
           targets=()
-          if [[ "${{ github.event.inputs.build_midori }}" == "true" ]]; then targets+=('{"target":"midori","config":"midori"}'); fi
-          if [[ "${{ github.event.inputs.build_ksun }}" == "true" ]]; then targets+=('{"target":"ksun","config":"ksun"}'); fi
-          if [[ "${{ github.event.inputs.build_sukisu }}" == "true" ]]; then
-            targets+=('{"target":"sukisu","config":"sukisu"}')
-            # Bisect variants: same config file, per-target overrides applied last
-            # (GITHUB_ENV is read top to bottom, so later lines win).
-            if [[ "${{ github.event.inputs.build_sukisu_variants }}" == "true" ]]; then
-              targets+=('{"target":"sukisu-nosusfs","config":"sukisu","overrides":"KSU_SUSFS=false;KSU_HOOKS_PATCH_FILE=SUKISU_HOOKS_PATCH.patch"}')
-              targets+=('{"target":"sukisu-nokpm","config":"sukisu","overrides":"KSU_KPM=false"}')
-              targets+=('{"target":"sukisu-nosusfs-nokpm","config":"sukisu","overrides":"KSU_SUSFS=false;KSU_HOOKS_PATCH_FILE=SUKISU_HOOKS_PATCH.patch;KSU_KPM=false"}')
-            fi
+          if [[ "${{ github.event.inputs.build_midori }}" == "true" ]]; then targets+=("midori"); fi
+          if [[ "${{ github.event.inputs.build_ksun }}" == "true" ]]; then targets+=("ksun"); fi
+          if [[ "${{ github.event.inputs.build_sukisu }}" == "true" ]]; then targets+=("sukisu"); fi
+          # Bisect variants: plain targets, each backed by its own config-<target>.env
+          if [[ "${{ github.event.inputs.build_sukisu_variants }}" == "true" ]]; then
+            targets+=("sukisu-nosusfs" "sukisu-nokpm" "sukisu-nosusfs-nokpm")
           fi
-          # GitHub needs at least one real vector key in a matrix, so emit the
-          # target list as the vector and keep config/overrides in include.
-          json=$(printf '%s\n' "${targets[@]}" | jq -s '{target: map(.target), include: .}')
+          json=$(printf '%s\n' "${targets[@]}" | jq -R . | jq -s '{target: .}')
           echo "Matrix: $json"
           echo "matrix<<EOF" >> $GITHUB_OUTPUT
           echo "$json" >> $GITHUB_OUTPUT
@@ -87,16 +80,10 @@ jobs:
 
     - name: Prepare environment
       run: |
-        TARGET_CONFIG_FILENAME="${{ matrix.config || matrix.target }}"
+        TARGET_CONFIG_FILENAME="${{ matrix.target }}"
         TARGET_CONFIG_FILENAME="${TARGET_CONFIG_FILENAME/-old/}"
         TARGET_CONFIG_FILENAME_SUFFIX=$TARGET_CONFIG_FILENAME
         grep -v -E "^#|^\n" config-${TARGET_CONFIG_FILENAME_SUFFIX}.env | sed 's/ #.*//; s/#.*//' >> $GITHUB_ENV
-        if [ -n "${{ matrix.overrides }}" ]; then
-            # Per-target overrides (semicolon separated key=value pairs), applied
-            # after the config file so they win.
-            echo "${{ matrix.overrides }}" | tr ';' '\n' | grep -v '^$' >> $GITHUB_ENV
-            echo "Target overrides: ${{ matrix.overrides }}"
-        fi
         echo "ANDROID_TAG=[A17]" >> $GITHUB_ENV
 
     - name: Set swap to 10G

@@ -199,12 +199,15 @@ installed as the KernelSU driver.
 Ticking **SukiSU: also build bisect variants** in the workflow adds three more jobs next to
 `build_sukisu`, each a normal matrix target with its own config file:
 
-| Target | Config file | Differs from `sukisu` by | Purpose |
+| Target | Config file | SUSFS sub-options | Purpose |
 |---|---|---|---|
-| `sukisu` | `config-sukisu.env` | – (SUSFS on, KPM on) | the shipping build |
-| `sukisu-nosusfs` | `config-sukisu-nosusfs.env` | `KSU_SUSFS=false` + `SUKISU_HOOKS_PATCH.patch` | is the SUSFS kernel patch the problem? |
-| `sukisu-nokpm` | `config-sukisu-nokpm.env` | `KSU_KPM=false` | is KPM the problem? |
-| `sukisu-nosusfs-nokpm` | `config-sukisu-nosusfs-nokpm.env` | both | bare driver wiring |
+| `sukisu` | `config-sukisu.env` | all on | the shipping build |
+| `sukisu-nosusfs` | `config-sukisu-nosusfs.env` | SUSFS off, hooks patch only | control: is the driver side fine? |
+| `sukisu-nomount` | `config-sukisu-nomount.env` | all but `SUS_MOUNT` | is `SUS_MOUNT` the fatal hunk? |
+| `sukisu-mountonly` | `config-sukisu-mountonly.env` | only `SUS_MOUNT` | isolated `SUS_MOUNT` |
+
+Every `CONFIG_KSU_SUSFS_*` is driven by a `KSU_SUSFS_*` variable (default `true`), so a
+sub-option can be flipped per target without touching the patch.
 
 Each target produces its own zip (`...-sukisu-nosusfs-...zip`) and flashes independently,
 so one workflow run answers the whole question instead of one build per hour. The variant

@@ -45,7 +45,7 @@ jobs:
           if [[ "${{ github.event.inputs.build_sukisu }}" == "true" ]]; then targets+=("sukisu"); fi
           # Bisect variants: plain targets, each backed by its own config-<target>.env
           if [[ "${{ github.event.inputs.build_sukisu_variants }}" == "true" ]]; then
-            targets+=("sukisu-nosusfs" "sukisu-nokpm" "sukisu-nosusfs-nokpm")
+            targets+=("sukisu-nosusfs" "sukisu-nomount" "sukisu-mountonly")
           fi
           json=$(printf '%s\n' "${targets[@]}" | jq -R . | jq -s '{target: .}')
           echo "Matrix: $json"
@@ -364,18 +364,26 @@ jobs:
             fi
             if [ "${{ env.KSU_SUSFS }}" = true ]; then
                 # Written explicitly instead of relying on the Kconfig defaults,
-                # so `make` never turns one of them off for us.
+                # so `make` never turns one of them off for us. Each sub-option can
+                # be flipped per target with KSU_SUSFS_<NAME>=false in config-*.env
+                # (used to bisect which SUSFS feature breaks a kernel).
+                susfs_opt() {
+                    local val
+                    val=$(printenv "$1" || true)
+                    [ -z "$val" ] && val=true
+                    set_config "$2" "$([ "$val" = true ] && echo y || echo n)"
+                }
                 set_config CONFIG_KSU_SUSFS y
-                set_config CONFIG_KSU_SUSFS_SUS_PATH y
-                set_config CONFIG_KSU_SUSFS_SUS_MOUNT y
-                set_config CONFIG_KSU_SUSFS_SUS_KSTAT y
-                set_config CONFIG_KSU_SUSFS_SPOOF_UNAME y
-                set_config CONFIG_KSU_SUSFS_ENABLE_LOG y
-                set_config CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS y
-                set_config CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG y
-                set_config CONFIG_KSU_SUSFS_OPEN_REDIRECT y
-                set_config CONFIG_KSU_SUSFS_SUS_MAP y
-                set_config CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER y
+                susfs_opt KSU_SUSFS_SUS_PATH                    CONFIG_KSU_SUSFS_SUS_PATH
+                susfs_opt KSU_SUSFS_SUS_MOUNT                   CONFIG_KSU_SUSFS_SUS_MOUNT
+                susfs_opt KSU_SUSFS_SUS_KSTAT                   CONFIG_KSU_SUSFS_SUS_KSTAT
+                susfs_opt KSU_SUSFS_SPOOF_UNAME                 CONFIG_KSU_SUSFS_SPOOF_UNAME
+                susfs_opt KSU_SUSFS_ENABLE_LOG                  CONFIG_KSU_SUSFS_ENABLE_LOG
+                susfs_opt KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS      CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS
+                susfs_opt KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
+                susfs_opt KSU_SUSFS_OPEN_REDIRECT               CONFIG_KSU_SUSFS_OPEN_REDIRECT
+                susfs_opt KSU_SUSFS_SUS_MAP                     CONFIG_KSU_SUSFS_SUS_MAP
+                susfs_opt KSU_SUSFS_PRIORITY_UID_FILTER         CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER
             else
                 set_config CONFIG_KSU_SUSFS n
             fi

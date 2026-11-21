@@ -52,7 +52,9 @@ jobs:
               targets+=('{"target":"sukisu-nosusfs-nokpm","config":"sukisu","overrides":"KSU_SUSFS=false;KSU_HOOKS_PATCH_FILE=SUKISU_HOOKS_PATCH.patch;KSU_KPM=false"}')
             fi
           fi
-          json=$(printf '%s\n' "${targets[@]}" | jq -s '{include: .}')
+          # GitHub needs at least one real vector key in a matrix, so emit the
+          # target list as the vector and keep config/overrides in include.
+          json=$(printf '%s\n' "${targets[@]}" | jq -s '{target: map(.target), include: .}')
           echo "Matrix: $json"
           echo "matrix<<EOF" >> $GITHUB_OUTPUT
           echo "$json" >> $GITHUB_OUTPUT

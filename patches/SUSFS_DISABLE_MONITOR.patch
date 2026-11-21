@@ -1,0 +1,13 @@
+diff --git a/fs/susfs.c b/fs/susfs.c
+--- a/fs/susfs.c
++++ b/fs/susfs.c
+@@ -2611,6 +2611,9 @@
+ }
+ 
+ void susfs_start_sdcard_monitor_fn(void) {
++	/* boot bisect: never start the /sdcard fsnotify monitor */
++	pr_info("susfs: boot bisect, sdcard monitor disabled");
++	return;
+ 	if (IS_ERR(kthread_run(susfs_sdcard_monitor_fn, NULL, "susfs_sdcard_monitor"))) {
+ 		SUSFS_LOGE("failed to create thread susfs_sdcard_monitor\n");
+ 		SUSFS_LOGI("/sdcard is forcibly set decrypted\n");

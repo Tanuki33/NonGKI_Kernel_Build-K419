@@ -45,7 +45,7 @@ jobs:
           if [[ "${{ github.event.inputs.build_sukisu }}" == "true" ]]; then targets+=("sukisu"); fi
           # Bisect variants: plain targets, each backed by its own config-<target>.env
           if [[ "${{ github.event.inputs.build_sukisu_variants }}" == "true" ]]; then
-            targets+=("sukisu-nosusfs" "sukisu-nomount" "sukisu-mountonly")
+            targets+=("sukisu-nosusfs" "sukisu-nomount" "sukisu-nomonitor")
           fi
           json=$(printf '%s\n' "${targets[@]}" | jq -R . | jq -s '{target: .}')
           echo "Matrix: $json"
@@ -337,6 +337,15 @@ jobs:
                 echo "Applying hook patch: patches/$HOOKS_PATCH_FILE"
                 git apply $GITHUB_WORKSPACE/patches/$HOOKS_PATCH_FILE
             fi
+            # Extra patches applied after the hook patch, space separated.
+            # Used to disable one SUSFS feature at a time for boot bisecting;
+            # the feature has to stay COMPILED (the driver calls its functions
+            # unconditionally), so these make it inert at runtime instead of
+            # turning the Kconfig option off.
+            for EXTRA_PATCH in ${KSU_EXTRA_PATCH:-}; do
+                echo "Applying extra patch: patches/$EXTRA_PATCH"
+                git apply $GITHUB_WORKSPACE/patches/$EXTRA_PATCH
+            done
             if [ "${{ env.ADD_KPROBES_CONFIG }}" = true ] && [ "${{ env.KSU_HOOKS_PATCH }}" != true ]; then
                 set_config CONFIG_MODULES y
                 set_config CONFIG_KPROBES y
@@ -379,7 +388,14 @@ jobs:
                     local val
                     val=$(printenv "$1" || true)
                     [ -z "$val" ] && val=true
-                    set_config "$2" "$([ "$val" = true ] && echo y || echo n)"
+                    if [ "$val" != true ]; then
+                        # A sub-option cannot simply be turned off: the driver
+                        # calls susfs_*/susfs_set_* unconditionally, so the
+                        # vmlinux link would fail. Use KSU_EXTRA_PATCH instead.
+                        echo "::warning::KSU_SUSFS_$1=false is not supported, keeping it enabled"
+                        val=true
+                    fi
+                    set_config "$2" y
                 }
                 set_config CONFIG_KSU_SUSFS y
                 susfs_opt KSU_SUSFS_SUS_PATH                    CONFIG_KSU_SUSFS_SUS_PATH

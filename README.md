@@ -108,7 +108,8 @@ installed as the KernelSU driver.
 | KSU_DRIVER_PATCH | <div align="center">✅</div> | File in `patches/` applied **inside the cloned driver repo** (not the kernel tree) after setup; empty = none | <div align="center">`SUKISU_DRIVER_4.19.patch`</div> |
 | KSU_MANUAL_HOOKS | <div align="center">✅</div> | Sets `CONFIG_KSU_MANUAL_HOOK=y` (requires `KSU_HOOKS_PATCH`) | <div align="center">`false`</div> |
 | KSU_BRANCH_LINK_HOOK | <div align="center">✅</div> | Sets `CONFIG_KSU_HACK_ARM64_BRANCH_LINK=y` + `CONFIG_KALLSYMS=y` — runtime call-site hooking, recommended for 4.19 | <div align="center">`true`</div> |
-| KSU_SUSFS | <div align="center">✅</div> | Keeps `CONFIG_KSU_SUSFS` **and all its sub-options** enabled (sus_path, sus_mount, sus_kstat, uname spoof, cmdline/bootconfig spoof, open_redirect, sus_map, priority uid filter). Requires a kernel tree that carries the SUSFS sources, i.e. `KSU_HOOKS_PATCH_FILE=SUKISU_SUSFS_4.19.patch` | <div align="center">`true`</div> |
+| KSU_SUSFS | <div align="center">✅</div> | Keeps `CONFIG_KSU_SUSFS` **and all its sub-options** enabled (sus_path, sus_mount, sus_kstat, uname spoof, cmdline/bootconfig spoof, open_redirect, sus_map, priority uid filter). Requires a kernel tree that carries the SUSFS sources: with SukiSU it lives inside `KSU_HOOKS_PATCH_FILE=SUKISU_SUSFS_4.19.patch`, with MidoriSU it comes from `KSU_SUSFS_PATCH_FILE` | <div align="center">`true`</div> |
+| KSU_SUSFS_PATCH_FILE | <div align="center">✅</div> | File in `patches/` applied when `KSU_SUSFS` is true and the SUSFS sources are **not** part of the hook patch (MidoriSU). Empty = no separate SUSFS patch | <div align="center">`MIDORISU_SUSFS_4.19.patch`</div> |
 | KSU_REVERT | <div align="center">✅</div> | Revert the [commit](https://github.com/tiann/KernelSU/commit/898e9d4f8ca9b2f46b0c6b36b80a872b5b88d899) that removed non-GKI kernel support | <div align="center">`true`</div> |
 <!-- | KSU_EXPECTED_SIZE | idk | idk | idk | -->
 <!-- | KSU_EXPECTED_HASH | idk | idk | idk | -->
@@ -175,7 +176,17 @@ installed as the KernelSU driver.
 > [!IMPORTANT]
 > This 4.19 tree has no kprobe/tracepoint KernelSU hooking (5.10+ only). Three wirings are
 > supported:
-> - **MidoriSU (default)** – branch-linked runtime hooking, no kernel source patches.
+> - **MidoriSU (default)** – branch-linked runtime hooking, no KernelSU kernel patches. SUSFS is
+>   added by `KSU_SUSFS_PATCH_FILE=MIDORISU_SUSFS_4.19.patch`: the **de-inlined SUSFS v2.4.0**
+>   backport for this 4.19 tree, adapted from [Midori's QGKI 5.4 patch](https://github.com/JackA1ltman/NonGKI_Kernel_Build_2nd)
+>   (the same base [ShockWAVE](https://github.com/MrShockWAVEog/shockwave_kernel_xiaomi_mt6768)
+>   uses). It carries no `ksu_handle_*` call-sites because the branch-link driver installs its
+>   own hooks at runtime; the SUSFS side only needs the hooks the patch itself adds
+>   (`namei`, `namespace`, `stat`, `statfs`, `super`, `readdir`, `proc/*`, `memory.c`,
+>   `selinux/avc.c`, `kallsyms.c`). `fs/namespace.c` differs from upstream in one place: this
+>   tree wraps `vfs_kern_mount()` around fs_context, so the fake SUS_MOUNT allocation sits in
+>   `vfs_create_mount()`.
+>   Set `KSU_SUSFS=false` (see `config-midori-nosusfs.env`) for a control build.
 > - **KernelSU-Next** – `KSU_HOOKS_PATCH=true` + `KSU_MANUAL_HOOKS=true`, which applies
 >   `patches/KSU_HOOKS_PATCH.patch` (specific to the 4.19.325 MT6768 tree).
 > - **SukiSU-Nova** – `KSU_HOOKS_PATCH=true` with the `builtin` branch driver, applying
@@ -205,15 +216,16 @@ installed as the KernelSU driver.
 >   process and Android's zygote aborts with
 >   `Unsupported st_mode for FD 3: Unknown`.
 
-### Bisect variants (`build_sukisu_variants`)
+### Control variants (`build_sukisu_variants`)
 
-Ticking **SukiSU: also build bisect variants** in the workflow adds three more jobs next to
-`build_sukisu`, each a normal matrix target with its own config file:
+Ticking **Also build control variants** in the workflow adds the no-SUSFS builds next to the
+normal targets, each a plain matrix target with its own config file:
 
-| Target | Config file | Differs from `sukisu` by | Purpose |
+| Target | Config file | Differs from its base by | Purpose |
 |---|---|---|---|
-| `sukisu` | `config-sukisu.env` | - | the shipping build |
+| `sukisu` | `config-sukisu.env` | - | the shipping SukiSU build |
 | `sukisu-nosusfs` | `config-sukisu-nosusfs.env` | SUSFS off, plain hooks patch | control build |
+| `midori-nosusfs` | `config-midori-nosusfs.env` | `KSU_SUSFS=false`, no SUSFS patch | isolates a SUSFS-only regression |
 
 `patches/SUSFS_DISABLE_SUS_MOUNT.patch` and `patches/SUSFS_DISABLE_MONITOR.patch`
 are kept for debugging a SUSFS boot problem; wire them in with

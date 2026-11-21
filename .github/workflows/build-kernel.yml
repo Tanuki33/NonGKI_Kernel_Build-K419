@@ -24,7 +24,7 @@ on:
         default: false
         type: boolean
       build_sukisu_variants:
-        description: 'SukiSU: also build bisect variants (no-SUSFS / no-KPM) in the same run'
+        description: 'Also build control variants (midori-nosusfs / sukisu-nosusfs) in the same run'
         required: true
         default: false
         type: boolean
@@ -43,9 +43,10 @@ jobs:
           if [[ "${{ github.event.inputs.build_midori }}" == "true" ]]; then targets+=("midori"); fi
           if [[ "${{ github.event.inputs.build_ksun }}" == "true" ]]; then targets+=("ksun"); fi
           if [[ "${{ github.event.inputs.build_sukisu }}" == "true" ]]; then targets+=("sukisu"); fi
-          # Bisect variants: plain targets, each backed by its own config-<target>.env
+          # Control variants: plain targets, each backed by its own config-<target>.env
           if [[ "${{ github.event.inputs.build_sukisu_variants }}" == "true" ]]; then
-            targets+=("sukisu-nosusfs")
+            [[ "${{ github.event.inputs.build_midori }}" == "true" ]] && targets+=("midori-nosusfs")
+            [[ "${{ github.event.inputs.build_sukisu }}" == "true" ]] && targets+=("sukisu-nosusfs")
           fi
           json=$(printf '%s\n' "${targets[@]}" | jq -R . | jq -s '{target: .}')
           echo "Matrix: $json"
@@ -341,6 +342,13 @@ jobs:
                 HOOKS_PATCH_FILE="${KSU_HOOKS_PATCH_FILE:-KSU_HOOKS_PATCH.patch}"
                 echo "Applying hook patch: patches/$HOOKS_PATCH_FILE"
                 git apply $GITHUB_WORKSPACE/patches/$HOOKS_PATCH_FILE
+            fi
+            # SUSFS kernel sources, when they are not already part of the hook
+            # patch above. MidoriSU pairs with the de-inlined SUSFS backport,
+            # which carries no KernelSU hook call-sites of its own.
+            if [ -n "${KSU_SUSFS_PATCH_FILE:-}" ]; then
+                echo "Applying SUSFS patch: patches/$KSU_SUSFS_PATCH_FILE"
+                git apply $GITHUB_WORKSPACE/patches/$KSU_SUSFS_PATCH_FILE
             fi
             # Extra patches applied after the hook patch, space separated.
             # Used to disable one SUSFS feature at a time for boot bisecting;

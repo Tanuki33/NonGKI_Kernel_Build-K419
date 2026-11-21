@@ -1,0 +1,23 @@
+diff --git a/kernel/selinux/rules.c b/kernel/selinux/rules.c
+--- a/kernel/selinux/rules.c
++++ b/kernel/selinux/rules.c
+@@ -203,7 +203,8 @@
+ 
+     reset_avc_cache(pol->latest_granting);
+ #ifdef CONFIG_KSU_SUSFS
+-    susfs_set_batch_sid();
++	/* boot bisect: do not resolve the SUSFS sids while applying sepolicy */
++	pr_info("kernelsu: boot bisect, susfs_set_batch_sid() skipped");
+ #endif
+ out_unlock:
+     mutex_unlock(&selinux_state.policy_mutex);
+@@ -260,7 +261,8 @@
+     smp_mb();
+     reset_avc_cache(0);
+ #ifdef CONFIG_KSU_SUSFS
+-    susfs_set_batch_sid();
++	/* boot bisect: do not resolve the SUSFS sids while applying sepolicy */
++	pr_info("kernelsu: boot bisect, susfs_set_batch_sid() skipped");
+ #endif
+ #endif
+ }

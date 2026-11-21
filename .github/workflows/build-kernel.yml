@@ -45,7 +45,7 @@ jobs:
           if [[ "${{ github.event.inputs.build_sukisu }}" == "true" ]]; then targets+=("sukisu"); fi
           # Bisect variants: plain targets, each backed by its own config-<target>.env
           if [[ "${{ github.event.inputs.build_sukisu_variants }}" == "true" ]]; then
-            targets+=("sukisu-nosusfs" "sukisu-nomount" "sukisu-nomonitor")
+            targets+=("sukisu-nosusfs" "sukisu-nomount" "sukisu-nomonitor" "sukisu-nobatchsid")
           fi
           json=$(printf '%s\n' "${targets[@]}" | jq -R . | jq -s '{target: .}')
           echo "Matrix: $json"
@@ -275,6 +275,11 @@ jobs:
             git -C "$KSU_DIR" apply --whitespace=nowarn "$GITHUB_WORKSPACE/patches/$KSU_DRIVER_PATCH"
             echo "Applied driver patch: $KSU_DRIVER_PATCH"
         fi
+        for DRIVER_EXTRA_PATCH in ${KSU_DRIVER_EXTRA_PATCH:-}; do
+            # Driver-side bisect patches, space separated.
+            git -C "$KSU_DIR" apply --whitespace=nowarn "$GITHUB_WORKSPACE/patches/$DRIVER_EXTRA_PATCH"
+            echo "Applied driver extra patch: $DRIVER_EXTRA_PATCH"
+        done
         if [ -n "$KERNELSU_REPO" ]; then
             KSU_VERSION="_$(git -C "$KSU_DIR" rev-parse --short HEAD)"
         elif [ -n "$KSU_DIR" ]; then

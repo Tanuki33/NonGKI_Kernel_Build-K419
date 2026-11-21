@@ -86,6 +86,21 @@ jobs:
         grep -v -E "^#|^\n" config-${TARGET_CONFIG_FILENAME_SUFFIX}.env | sed 's/ #.*//; s/#.*//' >> $GITHUB_ENV
         echo "ANDROID_TAG=[A17]" >> $GITHUB_ENV
 
+    - name: Set artifact tag
+      run: |
+        # Short label used in artifact / zip names so every variant is identifiable:
+        # [A17]<localversion>[<KSU_TAG>]-<matrix.target>-<device>-<time>.zip
+        KSU_CFG=$(grep -oP '^KSU_NAME=\K.*' config-${{ matrix.target }}.env 2>/dev/null | head -1)
+        case "$KSU_CFG" in
+            SukiSU*)   KSU_TAG=SukiSU ;;
+            KernelSU*) KSU_TAG=KernelSU ;;
+            MidoriSU*) KSU_TAG=MidoriSU ;;
+            "")        KSU_TAG=NoKSU ;;
+            *)         KSU_TAG="$KSU_CFG" ;;
+        esac
+        echo "KSU_TAG=${KSU_TAG}" >> $GITHUB_ENV
+        echo "Artifact tag: ${KSU_TAG} / ${{ matrix.target }}"
+
     - name: Set swap to 10G
       uses: pierotofy/set-swap-space@master
       with:
@@ -554,7 +569,7 @@ jobs:
             sed -i "s|^kernel.string=.*|kernel.string=${KERNEL_NAME} Kernel for ${DEVICE} by @${KERNEL_AUTHOR}|" AnyKernel3/anykernel.sh
             sed -i "s|^device.name1=.*|device.name1=${DEVICE}|" AnyKernel3/anykernel.sh
             sed -i "/^device\.name[2-9]=/d" AnyKernel3/anykernel.sh
-            printf '%s\n' "${KERNEL_NAME} for ${DEVICE}" "Linux 4.19.325 | LineageOS 24 | ${BUILD_TIME}" > AnyKernel3/version
+            printf '%s\n' "${KERNEL_NAME} for ${DEVICE}" "Linux 4.19.325 | LineageOS 24 | ${BUILD_TIME}" "${KSU_TAG:-NoKSU} | ${{ matrix.target }}" > AnyKernel3/version
             # ASCII art: ship assets/banner from this repo if it exists, otherwise drop
             # the upstream art (it belongs to someone else).
             if [ -f "$GITHUB_WORKSPACE/assets/banner" ]; then
@@ -597,7 +612,7 @@ jobs:
       if: env.CHECK_FILE_IS_OK == 'true'
       uses: actions/upload-artifact@v6
       with:
-        name: ${{ env.ANDROID_TAG }}${{ env.KERNEL_LOCALVERSION }}-${{ env.DEVICE }}-${{ env.BUILD_TIME }}
+        name: ${{ env.ANDROID_TAG }}${{ env.KERNEL_LOCALVERSION }}[${{ env.KSU_TAG }}]-${{ matrix.target }}-${{ env.DEVICE }}-${{ env.BUILD_TIME }}
         path: kernel_workspace/AnyKernel3/*
 
     - name: Upload Kernel Image

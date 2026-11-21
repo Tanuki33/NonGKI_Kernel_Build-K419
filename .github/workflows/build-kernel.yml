@@ -322,6 +322,14 @@ jobs:
         set_config CONFIG_LOCALVERSION "\"-$KERNEL_NAME\""
         echo "Kernel localversion: -$KERNEL_NAME"
 
+        # Debug aid: keep a panic on screen (and give pstore a chance to flush)
+        # long enough to photograph the trace. Only set by bisect variants.
+        PANIC_TIMEOUT="${KSU_PANIC_TIMEOUT:-}"
+        if [ -n "$PANIC_TIMEOUT" ]; then
+            set_config CONFIG_PANIC_TIMEOUT "$PANIC_TIMEOUT"
+            echo "panic timeout: $PANIC_TIMEOUT s"
+        fi
+
         if [ "${{ env.ENABLE_KERNELSU }}" = true ]; then
             if [ "${{ env.KSU_HOOKS_PATCH }}" = true ]; then
                 # Per-driver hook patch, defaults to the KernelSU-Next one.

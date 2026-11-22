@@ -430,6 +430,10 @@ jobs:
             echo 'CONFIG_OVERLAY_FS=y' >> "$CONFIG_FILE"
             echo 'CONFIG_OVERLAY_FS_REDIRECT_DIR=y' >> "$CONFIG_FILE"
             echo 'CONFIG_OVERLAY_FS_INDEX=y' >> "$CONFIG_FILE"
+            # KernelSU metamodules (meta-overlayfs / mountify / hybrid-mount) stage the
+            # overlay upperdir on tmpfs on f2fs /data, and overlayfs needs xattrs there.
+            echo 'CONFIG_TMPFS_XATTR=y' >> "$CONFIG_FILE"
+            echo 'CONFIG_TMPFS_POSIX_ACL=y' >> "$CONFIG_FILE"
         fi
 
         if [ "${{ env.ADD_APATCH_SUPPORT }}" = true ]; then

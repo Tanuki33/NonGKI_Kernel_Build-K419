@@ -166,7 +166,7 @@ installed as the KernelSU driver.
 
 | Misc section options | Optional | Description | Example value |
 |----------------------|----------|-------------|---------------|
-| ADD_OVERLAYFS_CONFIG | <div align="center">✅</div> | Automatically put the configs needed for OverlayFS into your defconfig | <div align="center">`false`</div> |
+| ADD_OVERLAYFS_CONFIG | <div align="center">✅</div> | Puts the configs an OverlayFS-based **KernelSU metamodule** needs into `.config`: `CONFIG_OVERLAY_FS`, `CONFIG_OVERLAY_FS_REDIRECT_DIR`, `CONFIG_OVERLAY_FS_INDEX`, plus `CONFIG_TMPFS_XATTR` and `CONFIG_TMPFS_POSIX_ACL` (metamodules stage the overlay upperdir on tmpfs when `/data` is f2fs) | <div align="center">`true`</div> |
 <br>
 
 | Proton specific section options | Optional | Description | Example value |
@@ -215,6 +215,37 @@ installed as the KernelSU driver.
 >   every exec leaves an anon-inode fd (`st_mode` type bits = 0) at fd 3 of every
 >   process and Android's zygote aborts with
 >   `Unsupported st_mode for FD 3: Unknown`.
+
+### Module mounting / metamodules (MidoriSU)
+
+MidoriSU is KernelSU **3.x** lineage (`ksud` reports `uapi: 6`), and since KernelSU 3.0 the
+manager no longer mounts modules itself: **mounting is delegated to a metamodule**.
+Without one installed, modules still run their scripts, but nothing they ship under
+`system/`, `vendor/`, `product/`, `system_ext`, `odm` or `oem` is applied.
+
+That is why the current seven modules work untouched — none of them has a `system/`
+directory (they are scripts, Zygisk, WebUI and config only). Install a metamodule before
+using a module that replaces system files, e.g. one of:
+
+| Metamodule | Backend | Notes |
+|---|---|---|
+| `meta-overlayfs` | OverlayFS | Official reference implementation (archived, still the baseline) |
+| `mountify` | OverlayFS (tmpfs / ext4-sparse) | Needs `CONFIG_OVERLAY_FS=y`, `CONFIG_TMPFS_XATTR=y` strongly recommended |
+| `hybrid-mount` | OverlayFS / magic mount / VFS per module & path | Heaviest, most configurable |
+
+Install like any module (`MidoriSU manager → Modules`, or
+`adb shell su -c 'ksud module install /sdcard/<zip>'`), then reboot.
+
+Kernel side, this build sets `ADD_OVERLAYFS_CONFIG=true`, which adds
+`CONFIG_OVERLAY_FS`, `CONFIG_OVERLAY_FS_REDIRECT_DIR`, `CONFIG_OVERLAY_FS_INDEX`,
+`CONFIG_TMPFS_XATTR` and `CONFIG_TMPFS_POSIX_ACL`. The tmpfs options matter on this
+device: `/data` is **f2fs**, which overlayfs refuses to use as an upperdir
+(`ovl_dentry_weird`), so metamodules either stage on tmpfs or on an ext4 image
+(`CONFIG_EXT4_FS` + `CONFIG_BLK_DEV_LOOP` are already `y`).
+
+SUSFS note: metamodule overlay mounts are ordinary kernel mounts, so hiding them from
+non-root processes is the job of `CONFIG_KSU_SUSFS_SUS_MOUNT` (already on) — keep it on
+whenever a metamodule is installed, otherwise `mountinfo` exposes the overlays.
 
 ### Control variants (`build_sukisu_variants`)
 

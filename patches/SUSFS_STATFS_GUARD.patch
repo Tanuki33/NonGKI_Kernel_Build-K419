@@ -1,0 +1,121 @@
+diff --git a/fs/namespace.c b/fs/namespace.c
+index 9b1b354..920191b 100644
+--- a/fs/namespace.c
++++ b/fs/namespace.c
+@@ -3861,25 +3861,42 @@ const struct proc_ns_operations mntns_operations = {
+ };
+ 
+ #ifdef CONFIG_KSU_SUSFS
++/*
++ * Upper bound for the mnt_parent walk. A valid mount hierarchy needs far fewer
++ * hops than this; the bound exists so a corrupt or cyclic parent chain cannot
++ * spin here forever while lock_mount_hash() is held - that stalls every mount
++ * and statfs caller for minutes and gets apps killed during startup.
++ */
++#define SUSFS_MNT_WALK_MAX 16
++
+ /* - To retrieve the non sus mnt_id from mount */
+ int susfs_get_non_sus_mnt_id_from_mnt(struct mount *orig_mnt) {
+-	struct mount *mnt = orig_mnt;
+-	int mnt_id;
++	struct mount *mnt;
++	int hops;
+ 
+-	if (mnt->mnt_id < DEFAULT_KSU_MNT_ID)
+-		return mnt->mnt_id;
++	if (orig_mnt->mnt_id < DEFAULT_KSU_MNT_ID)
++		return orig_mnt->mnt_id;
+ 
+ 	lock_mount_hash();
+-	for (; mnt && mnt->mnt_parent && mnt != mnt->mnt_parent && mnt->mnt_id >= DEFAULT_KSU_MNT_ID; mnt = mnt->mnt_parent) { }
+-	mnt_id = mnt->mnt_id;
++	for (mnt = orig_mnt, hops = 0; hops < SUSFS_MNT_WALK_MAX; hops++) {
++		if (!mnt->mnt_parent || mnt == mnt->mnt_parent ||
++		    mnt->mnt_id < DEFAULT_KSU_MNT_ID)
++			break;
++		mnt = mnt->mnt_parent;
++	}
+ 	unlock_mount_hash();
+-	return mnt_id;
++	if (hops >= SUSFS_MNT_WALK_MAX || !mnt)
++		return orig_mnt->mnt_id;
++	return mnt->mnt_id;
+ }
+ 
+ /* - To retrieve the non sus vfsmount from vfsmount, takes a reference on &mnt->mnt and mnt->mnt.mnt_root */
+ struct vfsmount *susfs_get_non_sus_vfsmnt_from_vfsmnt(struct vfsmount *vfsmnt) {
+ 	struct mount *mnt = real_mount(vfsmnt);
++	struct mount *walk;
++	int hops;
+ 
++	/* - Fast path: already a real mount, hand it back with refs taken. */
+ 	if (mnt->mnt_id < DEFAULT_KSU_MNT_ID) {
+ 		mntget(&mnt->mnt);
+ 		dget(mnt->mnt.mnt_root);
+@@ -3887,13 +3904,26 @@ struct vfsmount *susfs_get_non_sus_vfsmnt_from_vfsmnt(struct vfsmount *vfsmnt) {
+ 	}
+ 
+ 	lock_mount_hash();
+-	for (; mnt && mnt->mnt_parent && mnt != mnt->mnt_parent && mnt->mnt_id >= DEFAULT_KSU_MNT_ID; mnt = mnt->mnt_parent) { }
+-	mntget(&mnt->mnt);
+-	if (!mnt->mnt.mnt_root || IS_ERR(mnt->mnt.mnt_root)) {
+-		mntput(&mnt->mnt);
++	for (walk = mnt, hops = 0; hops < SUSFS_MNT_WALK_MAX; hops++) {
++		if (!walk->mnt_parent || walk == walk->mnt_parent ||
++		    walk->mnt_id < DEFAULT_KSU_MNT_ID)
++			break;
++		walk = walk->mnt_parent;
++	}
++	/* - Bounded walk, valid root, real mount: use that mount. */
++	if (walk && hops < SUSFS_MNT_WALK_MAX && walk->mnt.mnt_root &&
++	    !IS_ERR(walk->mnt.mnt_root)) {
++		mntget(&walk->mnt);
++		dget(walk->mnt.mnt_root);
+ 		unlock_mount_hash();
+-		return vfsmnt;
++		return &walk->mnt;
+ 	}
++
++	/* - Give up (cycle, too deep, or bogus root). Fall back to the original
++	 *   mount and take refs on it too: every caller does
++	 *   dput(ret->mnt_root) + mntput(ret) unconditionally, so returning a bare
++	 *   pointer here would underflow its refcount. */
++	mntget(&mnt->mnt);
+ 	dget(mnt->mnt.mnt_root);
+ 	unlock_mount_hash();
+ 	return &mnt->mnt;
+diff --git a/fs/statfs.c b/fs/statfs.c
+index 47e323a..c9a4678 100644
+--- a/fs/statfs.c
++++ b/fs/statfs.c
+@@ -131,9 +131,19 @@ int vfs_statfs(const struct path *path, struct kstatfs *buf)
+ #endif // #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+ 
+ #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+-	if (likely(susfs_is_current_proc_umounted())) {
+-		struct vfsmount *no_sus_vfsmnt = NULL;
++	/* - Only mounts that carry a SUSFS-assigned id need the unwrap. Skipping the
++	 *   real ones keeps df/statfs cheap on a system with 150+ mounts. */
++	if (likely(susfs_is_current_proc_umounted()) &&
++	    real_mount(path->mnt)->mnt_id >= DEFAULT_KSU_MNT_ID) {
++		struct vfsmount *no_sus_vfsmnt;
++
+ 		no_sus_vfsmnt = susfs_get_non_sus_vfsmnt_from_vfsmnt(path->mnt);
++		if (unlikely(!no_sus_vfsmnt)) {
++			error = statfs_by_dentry(path->dentry, buf);
++			if (!error)
++				buf->f_flags = calculate_f_flags(path->mnt);
++			return error;
++		}
+ 		if (path->mnt == no_sus_vfsmnt) {
+ 			dput(no_sus_vfsmnt->mnt_root);
+ 			mntput(no_sus_vfsmnt);
+@@ -141,7 +151,7 @@ int vfs_statfs(const struct path *path, struct kstatfs *buf)
+ 			if (!error)
+ 				buf->f_flags = calculate_f_flags(path->mnt);
+ 			return error;
+-	}
++		}
+ 		error = statfs_by_dentry(no_sus_vfsmnt->mnt_root, buf);
+ 		if (!error)
+ 			buf->f_flags = calculate_f_flags(no_sus_vfsmnt);

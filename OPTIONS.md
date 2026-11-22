@@ -130,6 +130,10 @@ The example values below are the ones shipped in `config-midori.env`.
 >   `selinux/avc.c`, `kallsyms.c`). `fs/namespace.c` differs from upstream in one place: this
 >   tree wraps `vfs_kern_mount()` around fs_context, so the fake SUS_MOUNT allocation sits in
 >   `vfs_create_mount()`.
+>   `KSU_EXTRA_PATCH=SUSFS_STATFS_GUARD.patch` is applied on top of it: it bounds the
+>   `mnt_parent` walk in `susfs_get_non_sus_{mnt_id,vfsmnt}_from_*()` and takes refs on the
+>   fallback mount, so a cyclic/short parent chain cannot spin while `lock_mount_hash()` is
+>   held (that stalls every `statfs` caller — `df`, storage UIs, app startup — for minutes).
 >   Set `KSU_SUSFS=false` (see `config-midori-nosusfs.env`) for a control build.
 > - **KernelSU-Next** – `KSU_HOOKS_PATCH=true` + `KSU_MANUAL_HOOKS=true`, which applies
 >   `patches/KSU_HOOKS_PATCH.patch` (specific to the 4.19.325 MT6768 tree).
